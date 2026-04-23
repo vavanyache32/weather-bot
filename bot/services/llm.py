@@ -82,11 +82,14 @@ class LLMService:
     async def _execute_prompt(self, prompt: str) -> Optional[str]:
         """Send prompt to LLM and return text, or None on failure."""
         if not self.enabled:
+            logger.warning("LLM disabled (no API key)")
             return None
         client = self._get_client()
         if client is None:
+            logger.warning("LLM client init failed (openai package missing?)")
             return None
 
+        logger.info("LLM prompt length=%d, model=%s", len(prompt), self._model)
         try:
             resp = await client.chat.completions.create(
                 model=self._model,
@@ -126,6 +129,7 @@ class LLMService:
             )
             return None
 
+        logger.info("LLM response length=%d", len(text))
         return text
 
     async def analyze(

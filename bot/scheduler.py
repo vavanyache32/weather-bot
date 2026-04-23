@@ -349,21 +349,29 @@ class WeatherScheduler:
 
     async def analyze_day(self, date_iso: str) -> Optional[str]:
         """Run LLM analysis for a single forecast day. Returns text or None."""
+        logger.info("Analyzing day %s (llm enabled=%s)", date_iso, self._llm.enabled)
         state = await self._store.get()
         day_raw = next(
             (d for d in state.forecast_days if d.get("date") == date_iso), None
         )
         if day_raw is None:
+            logger.warning("Day %s not found in forecast_days", date_iso)
             return None
         day = _deserialize_day(day_raw)
         if day is None:
+            logger.warning("Day %s deserialization failed", date_iso)
             return None
-        return await self._llm.analyze_day(
+        result = await self._llm.analyze_day(
             day=day,
             noaa_temp_c=state.last_noaa_temp_c,
             daily_max_so_far_c=state.daily_max_c,
             predicted_30min_c=state.predicted_30min_c,
         )
+        if result is None:
+            logger.warning("LLM returned None for day %s", date_iso)
+        else:
+            logger.info("LLM analysis for day %s received (%d chars)", date_iso, len(result))
+        return result
 
     async def _finalize_day(
         self, date_iso: Optional[str], actual_max_c: Optional[int]
