@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date as _date
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -11,6 +12,7 @@ from aiogram.types import CallbackQuery, Message
 from .keyboards import (
     CB_ABOUT,
     CB_FORECAST,
+    CB_FORECAST_OVERVIEW,
     CB_FORECAST_REFRESH,
     CB_MAIN,
     CB_REFRESH,
@@ -18,6 +20,8 @@ from .keyboards import (
     CB_VERIFIED,
     CB_VERIFIED_REFRESH,
     back_kb,
+    forecast_days_kb,
+    forecast_day_kb,
     forecast_kb,
     main_menu_kb,
     status_kb,
@@ -25,10 +29,12 @@ from .keyboards import (
 )
 from .scheduler import (
     WeatherScheduler,
+    format_day_analysis_message,
     format_forecast_message,
     format_status_message,
     format_verified_message,
 )
+from .services.forecast import DailyMaxForecast
 from .storage import StateStore
 
 logger = logging.getLogger(__name__)
@@ -82,9 +88,10 @@ def build_router(store: StateStore, scheduler: WeatherScheduler) -> Router:
             await message.answer("Секунду, собираю прогноз...")
             await scheduler.refresh_forecast(force=True)
             state = await store.get()
+        today_iso = scheduler.today_iso()
         await message.answer(
-            format_forecast_message(state),
-            reply_markup=forecast_kb(),
+            "📅 <b>Выбери дату для прогноза:</b>",
+            reply_markup=forecast_days_kb(state.forecast_days, today_iso),
             parse_mode="HTML",
         )
 
@@ -123,6 +130,22 @@ def build_router(store: StateStore, scheduler: WeatherScheduler) -> Router:
             await callback.answer("Собираю прогноз...")
             await scheduler.refresh_forecast(force=True)
             state = await store.get()
+        today_iso = scheduler.today_iso()
+        await _safe_edit(
+            callback,
+            "📅 <b>Выбери дату для прогноза:</b>",
+            forecast_days_kb(state.forecast_days, today_iso),
+            parse_mode="HTML",
+        )
+        await callback.answer()
+
+    @router.callback_query(F.data == CB_FORECAST_OVERVIEW)
+    async def cb_forecast_overview(callback: CallbackQuery) -> None:
+        state = await store.get()
+        if not state.forecast_days:
+            await callback.answer("Собираю прогноз...")
+            await scheduler.refresh_forecast(force=True)
+            state = await store.get()
         else:
             await callback.answer()
         await _safe_edit(
@@ -138,6 +161,31 @@ def build_router(store: StateStore, scheduler: WeatherScheduler) -> Router:
             callback, format_forecast_message(state), forecast_kb(), parse_mode="HTML"
         )
 
+    @router.callback_query(F.data.startswith("forecast:day:"))
+    async def cb_forecast_day(callback: CallbackQuery) -> None:
+        date_iso = callback.data.split(":", 2)[2]
+        await callback.answer("Анализирую...")
+        analysis = await scheduler.analyze_day(date_iso)
+        state = await store.get()
+        day_raw = next(
+            (d for d in state.forecast_days if d.get("date") == date_iso), None
+        )
+        if day_raw is None:
+            await _safe_edit(
+                callback,
+                "Данные устарели. Возвращаюсь к выбору даты.",
+                forecast_days_kb(state.forecast_days, scheduler.today_iso()),
+                parse_mode="HTML",
+            )
+            return
+        day = DailyMaxForecast(
+            date=_date.fromisoformat(day_raw["date"]),
+            open_meteo_c=day_raw.get("open_meteo_c"),
+            yandex_c=day_raw.get("yandex_c"),
+        )
+        text = format_day_analysis_message(day, analysis)
+        await _safe_edit(callback, text, forecast_day_kb(), parse_mode="HTML")
+
     @router.callback_query(F.data == CB_VERIFIED)
     async def cb_verified(callback: CallbackQuery) -> None:
         state = await store.get()
@@ -148,8 +196,6 @@ def build_router(store: StateStore, scheduler: WeatherScheduler) -> Router:
 
     @router.callback_query(F.data == CB_VERIFIED_REFRESH)
     async def cb_verified_refresh(callback: CallbackQuery) -> None:
-        # State already reflects finalised days (populated at midnight
-        # rollover by the scheduler); no network call needed here.
         state = await store.get()
         await _safe_edit(
             callback, format_verified_message(state), verified_kb(), parse_mode="HTML"

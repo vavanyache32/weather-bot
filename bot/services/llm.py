@@ -79,26 +79,13 @@ class LLMService:
         )
         return self._client
 
-    async def analyze(
-        self,
-        bundle: ForecastBundle,
-        noaa_temp_c: Optional[int],
-        daily_max_so_far_c: Optional[int],
-        predicted_30min_c: Optional[int],
-    ) -> Optional[str]:
-        """Return a short RU narrative, or None if disabled / failed."""
+    async def _execute_prompt(self, prompt: str) -> Optional[str]:
+        """Send prompt to LLM and return text, or None on failure."""
         if not self.enabled:
             return None
         client = self._get_client()
         if client is None:
             return None
-
-        prompt = self._build_prompt(
-            bundle=bundle,
-            noaa_temp_c=noaa_temp_c,
-            daily_max_so_far_c=daily_max_so_far_c,
-            predicted_30min_c=predicted_30min_c,
-        )
 
         try:
             resp = await client.chat.completions.create(
@@ -141,6 +128,38 @@ class LLMService:
 
         return text
 
+    async def analyze(
+        self,
+        bundle: ForecastBundle,
+        noaa_temp_c: Optional[int],
+        daily_max_so_far_c: Optional[int],
+        predicted_30min_c: Optional[int],
+    ) -> Optional[str]:
+        """Return a short RU narrative for the whole bundle, or None."""
+        prompt = self._build_prompt(
+            bundle=bundle,
+            noaa_temp_c=noaa_temp_c,
+            daily_max_so_far_c=daily_max_so_far_c,
+            predicted_30min_c=predicted_30min_c,
+        )
+        return await self._execute_prompt(prompt)
+
+    async def analyze_day(
+        self,
+        day: DailyMaxForecast,
+        noaa_temp_c: Optional[int],
+        daily_max_so_far_c: Optional[int],
+        predicted_30min_c: Optional[int],
+    ) -> Optional[str]:
+        """Return a short RU narrative for a single day, or None."""
+        prompt = self._build_day_prompt(
+            day=day,
+            noaa_temp_c=noaa_temp_c,
+            daily_max_so_far_c=daily_max_so_far_c,
+            predicted_30min_c=predicted_30min_c,
+        )
+        return await self._execute_prompt(prompt)
+
     @staticmethod
     def _build_prompt(
         bundle: ForecastBundle,
@@ -176,6 +195,46 @@ class LLMService:
             "Сделай короткий вывод: ожидаемый максимум сегодня, "
             "насколько согласны модели, и что это означает для Polymarket-рынка "
             "'Highest temperature today'."
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_day_prompt(
+        day: DailyMaxForecast,
+        noaa_temp_c: Optional[int],
+        daily_max_so_far_c: Optional[int],
+        predicted_30min_c: Optional[int],
+    ) -> str:
+        lines: list[str] = []
+        lines.append("Текущие наблюдения (NOAA METAR, UUWW):")
+        lines.append(
+            f"  сейчас: {noaa_temp_c}°C"
+            if noaa_temp_c is not None
+            else "  сейчас: нет данных"
+        )
+        lines.append(
+            f"  макс за сегодня по METAR: {daily_max_so_far_c}°C"
+            if daily_max_so_far_c is not None
+            else "  макс за сегодня: пока нет данных"
+        )
+        if predicted_30min_c is not None:
+            lines.append(f"  интерполированный прогноз +30 мин: {predicted_30min_c}°C")
+
+        lines.append("")
+        lines.append(f"Прогноз максимума на {day.date.isoformat()}:")
+        parts = []
+        if day.open_meteo_c is not None:
+            parts.append(f"Open-Meteo {day.open_meteo_c}°C")
+        if day.yandex_c is not None:
+            parts.append(f"Yandex {day.yandex_c}°C")
+        if day.spread_c is not None:
+            parts.append(f"(разброс моделей {day.spread_c}°C)")
+        lines.append("  " + " ".join(parts) if parts else "  нет данных")
+
+        lines.append("")
+        lines.append(
+            f"Сделай короткий вывод по прогнозу на {day.date.isoformat()}: "
+            "ожидаемый максимум, насколько согласны модели, уровень уверенности."
         )
         return "\n".join(lines)
 

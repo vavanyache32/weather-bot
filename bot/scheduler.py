@@ -79,6 +79,9 @@ class WeatherScheduler:
         self._last_yandex_reading: Optional[YandexReading] = None
         self._last_yandex_fetch: Optional[datetime] = None
 
+    def today_iso(self) -> str:
+        return datetime.now(self._tz).date().isoformat()
+
     async def run(self) -> None:
         """Main loop. Catches per-tick errors so one bad poll can't kill the bot."""
         logger.info(
@@ -344,6 +347,24 @@ class WeatherScheduler:
         )
         return True
 
+    async def analyze_day(self, date_iso: str) -> Optional[str]:
+        """Run LLM analysis for a single forecast day. Returns text or None."""
+        state = await self._store.get()
+        day_raw = next(
+            (d for d in state.forecast_days if d.get("date") == date_iso), None
+        )
+        if day_raw is None:
+            return None
+        day = _deserialize_day(day_raw)
+        if day is None:
+            return None
+        return await self._llm.analyze_day(
+            day=day,
+            noaa_temp_c=state.last_noaa_temp_c,
+            daily_max_so_far_c=state.daily_max_c,
+            predicted_30min_c=state.predicted_30min_c,
+        )
+
     async def _finalize_day(
         self, date_iso: Optional[str], actual_max_c: Optional[int]
     ) -> None:
@@ -517,6 +538,44 @@ def format_forecast_message(state: WeatherState) -> str:
     if state.forecast_fetched_at_iso:
         lines.append("")
         lines.append(f"<i>Обновлено: {state.forecast_fetched_at_iso}</i>")
+    return "\n".join(lines)
+
+
+def format_day_analysis_message(
+    day: DailyMaxForecast, analysis_text: Optional[str]
+) -> str:
+    """Render a single-day forecast + LLM analysis for Telegram."""
+    lines: list[str] = []
+    lines.append(f"📅 <b>Прогноз на {day.date.isoformat()}</b>")
+
+    parts = []
+    if day.open_meteo_c is not None:
+        parts.append(f"Open-Meteo {day.open_meteo_c}°C")
+    if day.yandex_c is not None:
+        parts.append(f"Yandex {day.yandex_c}°C")
+    if parts:
+        lines.append(f"🌤 Модели: {', '.join(parts)}")
+    else:
+        lines.append("🌤 Модели: нет данных")
+
+    if day.spread_c is not None:
+        if day.spread_c == 0:
+            lines.append("🟢 Модели полностью согласны")
+        elif day.spread_c <= 2:
+            lines.append(f"🟢 Уверенность высокая (спред {day.spread_c}°C)")
+        elif day.spread_c <= 4:
+            lines.append(f"🟡 Уверенность средняя (спред {day.spread_c}°C)")
+        else:
+            lines.append(f"🔴 Уверенность низкая (спред {day.spread_c}°C)")
+
+    if analysis_text:
+        lines.append("")
+        lines.append("🧠 <b>Анализ ИИ:</b>")
+        lines.append(analysis_text)
+    else:
+        lines.append("")
+        lines.append("🧠 <b>Анализ ИИ:</b> недоступен (LLM не настроен или ошибка)")
+
     return "\n".join(lines)
 
 

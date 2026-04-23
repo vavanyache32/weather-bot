@@ -11,6 +11,7 @@ CB_ABOUT = "menu:about"
 CB_REFRESH = "menu:status:refresh"
 CB_FORECAST = "menu:forecast"
 CB_FORECAST_REFRESH = "menu:forecast:refresh"
+CB_FORECAST_OVERVIEW = "menu:forecast:overview"
 CB_VERIFIED = "menu:verified"
 CB_VERIFIED_REFRESH = "menu:verified:refresh"
 
@@ -40,6 +41,49 @@ def forecast_kb() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Обновить", callback_data=CB_FORECAST_REFRESH)],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_MAIN)],
+        ]
+    )
+
+
+def forecast_days_kb(forecast_days: list[dict], today_iso: str) -> InlineKeyboardMarkup:
+    """Inline keyboard with one button per forecast day."""
+    from datetime import date as _date, timedelta
+
+    today = _date.fromisoformat(today_iso)
+    tomorrow = today + timedelta(days=1)
+
+    day_buttons: list[InlineKeyboardButton] = []
+    for raw in forecast_days:
+        date_iso = raw.get("date")
+        if not date_iso:
+            continue
+        d = _date.fromisoformat(date_iso)
+        if d == today:
+            label = f"Сегодня ({d.day:02d}.{d.month:02d})"
+        elif d == tomorrow:
+            label = f"Завтра ({d.day:02d}.{d.month:02d})"
+        else:
+            label = f"{d.day:02d}.{d.month:02d}"
+        day_buttons.append(
+            InlineKeyboardButton(text=label, callback_data=f"forecast:day:{date_iso}")
+        )
+
+    # Arrange days two per row
+    rows = [day_buttons[i : i + 2] for i in range(0, len(day_buttons), 2)]
+    rows.append(
+        [InlineKeyboardButton(text="📊 Общий прогноз", callback_data=CB_FORECAST_OVERVIEW)]
+    )
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_MAIN)]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def forecast_day_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К выбору даты", callback_data=CB_FORECAST)],
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data=CB_MAIN)],
         ]
     )
 
