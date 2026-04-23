@@ -17,7 +17,13 @@ jobs:
           script_stop: true
           script: |
             cd /root/weatherapp
+            # Remove generated artefacts that should never be in git
+            rm -rf bot/__pycache__
+            # Stash any local changes (e.g. .env secrets) so git pull can proceed,
+            # then restore them after pull.
+            git stash push -m "deploy-autostash" || true
             git pull origin main
+            git stash pop || true
             source .venv/bin/activate
             pip install -q -r requirements.txt
             systemctl restart weatherbot
