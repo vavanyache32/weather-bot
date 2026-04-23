@@ -2,7 +2,8 @@
 
 Notification rules (matches the product spec):
 
-* Poll NOAA + Yandex every ``poll_interval_seconds`` (default 30 min).
+* Poll NOAA every ``poll_interval_seconds`` (default 1 min); Yandex is
+  throttled to once per 10 min so we don't burn API quota.
 * Track the **max** NOAA temperature for the current day (Moscow local
   time), resetting at local midnight.  This matches Polymarket's
   resolution semantics: daily max, not average / not latest.
@@ -30,7 +31,7 @@ from .config import Config
 from .services.forecast import DailyMaxForecast, ForecastBundle, ForecastService
 from .services.llm import LLMService
 from .services.noaa import NOAAService
-from .services.yandex import YandexService, predict_temperature_c
+from .services.yandex import YandexReading, YandexService, predict_temperature_c
 from .storage import StateStore, WeatherState
 
 # Horizon of the short-term forecast line we attach to every message.
@@ -75,6 +76,8 @@ class WeatherScheduler:
         self._llm = llm
         self._tz = ZoneInfo(config.timezone)
         self._last_forecast_refresh: Optional[datetime] = None
+        self._last_yandex_reading: Optional[YandexReading] = None
+        self._last_yandex_fetch: Optional[datetime] = None
 
     async def run(self) -> None:
         """Main loop. Catches per-tick errors so one bad poll can't kill the bot."""
@@ -96,10 +99,21 @@ class WeatherScheduler:
 
     async def tick(self) -> TickResult:
         """Run one poll + maybe-notify cycle. Returns a summary for tests."""
-        noaa_raw, yandex_reading = await asyncio.gather(
-            self._noaa.get_temperature_c(),
-            self._yandex.fetch(),
-        )
+        noaa_raw = await self._noaa.get_temperature_c()
+
+        # Throttle Yandex so we don't burn API quota when polling NOAA
+        # every minute. 10 min is more than enough for current temp + hourly.
+        now_local = datetime.now(self._tz)
+        if (
+            self._last_yandex_fetch is None
+            or (now_local - self._last_yandex_fetch).total_seconds() >= 600
+        ):
+            yandex_reading = await self._yandex.fetch()
+            self._last_yandex_reading = yandex_reading
+            self._last_yandex_fetch = now_local
+        else:
+            yandex_reading = self._last_yandex_reading
+
         yandex_raw = yandex_reading.current_c if yandex_reading else None
 
         # Per Polymarket rules: round to whole degrees Celsius.
@@ -107,7 +121,6 @@ class WeatherScheduler:
         yandex_temp = round(yandex_raw) if yandex_raw is not None else None
 
         # Short-term forecast (Yandex hourly, linearly interpolated to +30m).
-        now_local = datetime.now(self._tz)
         target = now_local + FORECAST_HORIZON
         predicted_raw = (
             predict_temperature_c(yandex_reading.hourly, target)
@@ -143,11 +156,18 @@ class WeatherScheduler:
                 state.daily_max_c = noaa_temp
                 new_max = True
 
+        # Notify only when something actually changed so the user isn't
+        # spammed on every tick.
         should_notify = False
-        if noaa_temp is not None:
+        if new_max:
             should_notify = True
-        elif yandex_temp is not None:
-            # NOAA is down; still keep the user informed via Yandex.
+        elif noaa_temp is not None and noaa_temp != state.last_noaa_temp_c:
+            should_notify = True
+        elif yandex_temp is not None and yandex_temp != state.last_yandex_temp_c:
+            should_notify = True
+        elif noaa_temp is None and yandex_temp is not None:
+            # NOAA is down but Yandex is up — notify at least once so the
+            # user knows we're falling back to the secondary source.
             should_notify = True
 
         # Persist: only overwrite last_*_temp when we actually got a reading,

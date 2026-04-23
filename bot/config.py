@@ -29,7 +29,7 @@ class Config:
     moscow_lon: float = 37.2615
 
     # Scheduler
-    poll_interval_seconds: int = 30 * 60  # 30 minutes
+    poll_interval_seconds: int = 60  # 1 minute
     timezone: str = "Europe/Moscow"
 
     # HTTP
@@ -116,7 +116,7 @@ def load_config() -> Config:
     else:
         yandex_key = yandex_key_raw
 
-    poll_seconds = int(os.environ.get("POLL_INTERVAL_SECONDS", 30 * 60))
+    poll_seconds = int(os.environ.get("POLL_INTERVAL_SECONDS", 60))
     log_level = os.environ.get("LOG_LEVEL", "INFO")
     state_file = Path(os.environ.get("STATE_FILE", "state.json"))
     user_agent = os.environ.get(
