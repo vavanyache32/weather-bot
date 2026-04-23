@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(mkdir)",
+      "Exec(python)",
+      "Exec(ls)",
+      "Exec(curl)",
+      "Exec(cmd)",
+      "Exec(./.venv/Scripts/python.exe)",
+      "Exec(set)",
+      "Exec(cat)",
+      "Exec(sed)",
+      "Exec(date)",
+      "Exec(tasklist)",
+      "Exec(.venv/Scripts/python.exe)",
+      "Exec(rm)",
+      "Exec(stat)",
+      "Exec(powershell)",
+      "Exec(file)",
+      "Exec(schtasks)",
+      "Exec(sleep)",
+      "Exec(tail)",
+      "Exec(taskkill)",
+      "Exec(wmic process)",
+      "Exec(awk)"
+    ]
+  }
+}

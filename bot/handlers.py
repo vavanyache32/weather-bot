@@ -1,0 +1,182 @@
+"""Telegram command and callback handlers."""
+from __future__ import annotations
+
+import logging
+
+from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, Message
+
+from .keyboards import (
+    CB_ABOUT,
+    CB_FORECAST,
+    CB_FORECAST_REFRESH,
+    CB_MAIN,
+    CB_REFRESH,
+    CB_STATUS,
+    CB_VERIFIED,
+    CB_VERIFIED_REFRESH,
+    back_kb,
+    forecast_kb,
+    main_menu_kb,
+    status_kb,
+    verified_kb,
+)
+from .scheduler import (
+    WeatherScheduler,
+    format_forecast_message,
+    format_status_message,
+    format_verified_message,
+)
+from .storage import StateStore
+
+logger = logging.getLogger(__name__)
+
+WELCOME_TEXT = (
+    "👋 Привет!\n\n"
+    "Я слежу за температурой в Москве (Внуково, UUWW) по данным NOAA METAR "
+    "и сравниваю с Yandex.Weather. Раз в 30 минут присылаю обновление, "
+    "если температура изменилась или обновился дневной максимум.\n\n"
+    "Дополнительно строю ансамблевый прогноз максимума на ближайшие дни "
+    "(Open-Meteo + Yandex) и, если включён LLM, прикладываю короткий "
+    "комментарий к числам.\n\n"
+    "Выберите действие:"
+)
+
+ABOUT_TEXT = (
+    "ℹ️ <b>О боте</b>\n\n"
+    "• Наблюдения: NOAA / NWS Aviation Weather Center (METAR UUWW).\n"
+    "• Прогноз-ансамбль: Open-Meteo (seamless NWP) + Yandex daily max.\n"
+    "• Логика наблюдений соответствует Polymarket: максимум за локальные "
+    "сутки (Москва) в целых °C.\n"
+    "• LLM (если настроен) только комментирует реальные числа — сам "
+    "прогноз не выдумывает.\n\n"
+    "Команды:\n"
+    "  /start — главное меню\n"
+    "  /status — текущее состояние\n"
+    "  /forecast — прогноз максимума + анализ"
+)
+
+
+def build_router(store: StateStore, scheduler: WeatherScheduler) -> Router:
+    router = Router(name="weather-commands")
+
+    # -------- slash commands --------
+
+    @router.message(Command("start"))
+    async def on_start(message: Message) -> None:
+        await message.answer(WELCOME_TEXT, reply_markup=main_menu_kb())
+
+    @router.message(Command("status"))
+    async def on_status(message: Message) -> None:
+        state = await store.get()
+        await message.answer(
+            format_status_message(state), reply_markup=status_kb()
+        )
+
+    @router.message(Command("forecast"))
+    async def on_forecast(message: Message) -> None:
+        state = await store.get()
+        if not state.forecast_days:
+            await message.answer("Секунду, собираю прогноз...")
+            await scheduler.refresh_forecast(force=True)
+            state = await store.get()
+        await message.answer(
+            format_forecast_message(state),
+            reply_markup=forecast_kb(),
+            parse_mode="HTML",
+        )
+
+    @router.message(Command("verified"))
+    async def on_verified(message: Message) -> None:
+        state = await store.get()
+        await message.answer(
+            format_verified_message(state),
+            reply_markup=verified_kb(),
+            parse_mode="HTML",
+        )
+
+    # -------- inline-button callbacks --------
+
+    @router.callback_query(F.data == CB_MAIN)
+    async def cb_main(callback: CallbackQuery) -> None:
+        await _safe_edit(callback, WELCOME_TEXT, main_menu_kb())
+        await callback.answer()
+
+    @router.callback_query(F.data == CB_STATUS)
+    async def cb_status(callback: CallbackQuery) -> None:
+        state = await store.get()
+        await _safe_edit(callback, format_status_message(state), status_kb())
+        await callback.answer()
+
+    @router.callback_query(F.data == CB_REFRESH)
+    async def cb_refresh(callback: CallbackQuery) -> None:
+        state = await store.get()
+        await _safe_edit(callback, format_status_message(state), status_kb())
+        await callback.answer("Обновлено")
+
+    @router.callback_query(F.data == CB_FORECAST)
+    async def cb_forecast(callback: CallbackQuery) -> None:
+        state = await store.get()
+        if not state.forecast_days:
+            await callback.answer("Собираю прогноз...")
+            await scheduler.refresh_forecast(force=True)
+            state = await store.get()
+        else:
+            await callback.answer()
+        await _safe_edit(
+            callback, format_forecast_message(state), forecast_kb(), parse_mode="HTML"
+        )
+
+    @router.callback_query(F.data == CB_FORECAST_REFRESH)
+    async def cb_forecast_refresh(callback: CallbackQuery) -> None:
+        await callback.answer("Обновляю...")
+        await scheduler.refresh_forecast(force=True)
+        state = await store.get()
+        await _safe_edit(
+            callback, format_forecast_message(state), forecast_kb(), parse_mode="HTML"
+        )
+
+    @router.callback_query(F.data == CB_VERIFIED)
+    async def cb_verified(callback: CallbackQuery) -> None:
+        state = await store.get()
+        await _safe_edit(
+            callback, format_verified_message(state), verified_kb(), parse_mode="HTML"
+        )
+        await callback.answer()
+
+    @router.callback_query(F.data == CB_VERIFIED_REFRESH)
+    async def cb_verified_refresh(callback: CallbackQuery) -> None:
+        # State already reflects finalised days (populated at midnight
+        # rollover by the scheduler); no network call needed here.
+        state = await store.get()
+        await _safe_edit(
+            callback, format_verified_message(state), verified_kb(), parse_mode="HTML"
+        )
+        await callback.answer("Обновлено")
+
+    @router.callback_query(F.data == CB_ABOUT)
+    async def cb_about(callback: CallbackQuery) -> None:
+        await _safe_edit(callback, ABOUT_TEXT, back_kb(), parse_mode="HTML")
+        await callback.answer()
+
+    return router
+
+
+async def _safe_edit(callback: CallbackQuery, text: str, markup, parse_mode=None) -> None:
+    """Edit the message the callback was attached to; ignore no-op edits.
+
+    Telegram returns "message is not modified" if the user taps the same
+    button twice — that's harmless and should not bubble up as an error.
+    """
+    if callback.message is None:
+        return
+    try:
+        await callback.message.edit_text(
+            text, reply_markup=markup, parse_mode=parse_mode
+        )
+    except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc).lower():
+            return
+        logger.warning("edit_text failed: %s", exc)

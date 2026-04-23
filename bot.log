@@ -1,0 +1,185 @@
+[Thu 04/23/2026 13:16:36.19] --- bot starting ---
+2026-04-23 13:16:37 [INFO] bot: Starting weather bot: station=UUWW chat_id=707008589 llm=kimi-k2.6 via https://api.moonshot.ai/v1
+2026-04-23 13:16:37 [INFO] bot.scheduler: Scheduler starting: station=UUWW interval=1800s tz=Europe/Moscow
+2026-04-23 13:16:37 [INFO] bot.services.yandex: Yandex observation: 1.0°C; hourly points: 88; daily points: 7
+[Thu 04/23/2026 13:19:01.82] --- bot starting ---
+2026-04-23 13:19:10 [INFO] bot: Starting weather bot: station=UUWW chat_id=707008589 llm=kimi-k2.6 via https://api.moonshot.ai/v1
+2026-04-23 13:19:10 [INFO] bot.scheduler: Scheduler starting: station=UUWW interval=1800s tz=Europe/Moscow
+2026-04-23 13:19:10 [INFO] bot.services.yandex: Yandex observation: 1.0°C; hourly points: 88; daily points: 7
+2026-04-23 13:19:14 [INFO] bot.services.noaa: NOAA METAR: station=UUWW temp=3°C obsTime=2026-04-23T13:00:00.000Z raw=METAR UUWW 231300Z 34006G12MPS 9999 -RA BKN012 OVC026 03/01 Q0992 WS R06 R06/290250 NOSIG
+2026-04-23 13:19:14 [INFO] bot.services.yandex: Yandex observation: 1.0°C; hourly points: 88; daily points: 7
+2026-04-23 13:19:14 [INFO] bot.services.openmeteo: Open-Meteo daily forecast: 5 days, today_max=7.5
+2026-04-23 13:19:14 [INFO] bot.services.forecast: Forecast ensemble: 5 days (om=5, yx=7)
+2026-04-23 13:19:31 [INFO] bot.scheduler: Scheduler cancelled; exiting loop
+Traceback (most recent call last):
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\connector.py", line 1310, in _wrap_create_connection
+    sock = await aiohappyeyeballs.start_connection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohappyeyeballs\impl.py", line 122, in start_connection
+    raise first_exception
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohappyeyeballs\impl.py", line 73, in start_connection
+    sock = await _connect_sock(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohappyeyeballs\impl.py", line 208, in _connect_sock
+    await loop.sock_connect(sock, address)
+  File "C:\Users\zzzzzzzzz\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 729, in sock_connect
+    return await self._proactor.connect(sock, address)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\AppData\Local\Programs\Python\Python312\Lib\asyncio\windows_events.py", line 803, in _poll
+    value = callback(transferred, key, ov)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\AppData\Local\Programs\Python\Python312\Lib\asyncio\windows_events.py", line 599, in finish_connect
+    ov.getresult()
+OSError: [WinError 121] The semaphore timeout period has expired
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiogram\client\session\aiohttp.py", line 167, in make_request
+    async with session.post(
+               ^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\client.py", line 1521, in __aenter__
+    self._resp: _RetType = await self._coro
+                           ^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\client.py", line 788, in _request
+    resp = await handler(req)
+           ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\client.py", line 742, in _connect_and_send_request
+    conn = await self._connector.connect(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\connector.py", line 672, in connect
+    proto = await self._create_connection(req, traces, timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\connector.py", line 1251, in _create_connection
+    _, proto = await self._create_direct_connection(req, traces, timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\connector.py", line 1623, in _create_direct_connection
+    raise last_exc
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\connector.py", line 1592, in _create_direct_connection
+    transp, proto = await self._wrap_create_connection(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiohttp\connector.py", line 1333, in _wrap_create_connection
+    raise client_error(req.connection_key, exc) from exc
+aiohttp.client_exceptions.ClientConnectorError: Cannot connect to host api.telegram.org:443 ssl:default [The semaphore timeout period has expired]
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\bot\__main__.py", line 117, in <module>
+    main()
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\bot\__main__.py", line 107, in main
+    asyncio.run(_amain())
+  File "C:\Users\zzzzzzzzz\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\bot\__main__.py", line 95, in _amain
+    await dp.start_polling(bot, handle_signals=False)
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiogram\dispatcher\dispatcher.py", line 621, in start_polling
+    await asyncio.gather(*done)
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiogram\dispatcher\dispatcher.py", line 377, in _polling
+    user: User = await bot.me()
+                 ^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiogram\client\bot.py", line 367, in me
+    self._me = await self.get_me()
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiogram\client\bot.py", line 1803, in get_me
+    return await self(call, request_timeout=request_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiogram\client\bot.py", line 493, in __call__
+    return await self.session(self, method, timeout=request_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiogram\client\session\base.py", line 259, in __call__
+    return cast(TelegramType, await middleware(bot, method))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zzzzzzzzz\Desktop\weatherapp\.venv\Lib\site-packages\aiogram\client\session\aiohttp.py", line 176, in make_request
+    raise TelegramNetworkError(method=method, message=f"{type(e).__name__}: {e}") from e
+aiogram.exceptions.TelegramNetworkError: HTTP Client says - ClientConnectorError: Cannot connect to host api.telegram.org:443 ssl:default [The semaphore timeout period has expired]
+[Thu 04/23/2026 13:19:31.83] --- bot exited rc=1 ---
+[Thu 04/23/2026 13:22:45.06] --- bot starting ---
+2026-04-23 13:22:45 [INFO] bot: Starting weather bot: station=UUWW chat_id=707008589 llm=kimi-k2.6 via https://api.moonshot.ai/v1
+2026-04-23 13:22:45 [INFO] bot.scheduler: Scheduler starting: station=UUWW interval=1800s tz=Europe/Moscow
+[Thu 04/23/2026 13:34:53.63] --- bot starting (attempt=0) ---
+[Thu 04/23/2026 13:34:53.63] --- bot exited rc=0 ---
+[Thu 04/23/2026 13:34:53.64] sleeping 5s before restart
+[Thu 04/23/2026 13:34:57.69] --- bot starting (attempt=1) ---
+[Thu 04/23/2026 13:34:57.69] --- bot exited rc=0 ---
+[Thu 04/23/2026 13:34:57.69] sleeping 10s before restart
+[Thu 04/23/2026 13:36:48.66] --- bot starting (attempt=0) ---
+2026-04-23 13:36:49 [INFO] bot: Starting weather bot: station=UUWW chat_id=707008589 llm=kimi-k2.6 via https://api.moonshot.ai/v1
+2026-04-23 13:36:49 [INFO] bot.scheduler: Scheduler starting: station=UUWW interval=1800s tz=Europe/Moscow
+2026-04-23 13:37:01 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 13:37:01 [INFO] bot.services.noaa: NOAA METAR: station=UUWW temp=3°C obsTime=2026-04-23T13:30:00.000Z raw=METAR UUWW 231330Z 35008G13MPS 9999 BKN011 OVC026 03/01 Q0992 WS R06 R06/290250 NOSIG
+2026-04-23 13:37:01 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 13:37:01 [INFO] bot.services.openmeteo: Open-Meteo daily forecast: 5 days, today_max=7.5
+2026-04-23 13:37:01 [INFO] bot.services.forecast: Forecast ensemble: 5 days (om=5, yx=7)
+2026-04-23 13:37:53 [INFO] httpx: HTTP Request: POST https://api.moonshot.ai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-23 13:37:54 [INFO] bot.scheduler: Forecast refreshed (force=False): 5 days, 0 new future-day snapshots, analysis=yes
+2026-04-23 13:37:54 [INFO] bot.scheduler: No change: noaa=3 max=10 yandex=2
+2026-04-23 13:50:24 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramNetworkError: HTTP Client says - Request timeout error
+2026-04-23 13:50:24 [WARNING] aiogram.dispatcher: Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 8723588566)
+2026-04-23 14:07:54 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:07:55 [INFO] bot.services.noaa: NOAA METAR: station=UUWW temp=3°C obsTime=2026-04-23T14:00:00.000Z raw=METAR UUWW 231400Z 34009MPS 9999 BKN013 OVC026 03/01 Q0992 WS R06 R06/290250 NOSIG
+2026-04-23 14:07:55 [INFO] bot.scheduler: No change: noaa=3 max=10 yandex=2
+2026-04-23 14:15:29 [INFO] bot: Starting weather bot: station=UUWW chat_id=707008589 llm=kimi-k2.6 via https://api.moonshot.ai/v1
+2026-04-23 14:15:29 [INFO] bot.scheduler: Scheduler starting: station=UUWW interval=1800s tz=Europe/Moscow
+2026-04-23 14:15:29 [INFO] bot.services.noaa: NOAA METAR: station=UUWW temp=3°C obsTime=2026-04-23T14:00:00.000Z raw=METAR UUWW 231400Z 34009MPS 9999 BKN013 OVC026 03/01 Q0992 WS R06 R06/290250 NOSIG
+2026-04-23 14:15:29 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:15:29 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:15:30 [INFO] bot.services.openmeteo: Open-Meteo daily forecast: 5 days, today_max=7.5
+2026-04-23 14:15:30 [INFO] bot.services.forecast: Forecast ensemble: 5 days (om=5, yx=7)
+2026-04-23 14:16:03 [INFO] httpx: HTTP Request: POST https://api.moonshot.ai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-23 14:16:03 [INFO] bot.scheduler: Forecast refreshed (force=False): 5 days, 0 new future-day snapshots, analysis=yes
+2026-04-23 14:16:04 [INFO] bot.scheduler: Sent update: 🌡 NOAA (Vnukovo): 3°C | 📈 Max today: 10°C | 🟡 Yandex: 2°C | 🔮 Через 30 мин: 2°C (Yandex)
+2026-04-23 14:16:32 [INFO] bot: Starting weather bot: station=UUWW chat_id=707008589 llm=kimi-k2.6 via https://api.moonshot.ai/v1
+2026-04-23 14:16:32 [INFO] bot.scheduler: Scheduler starting: station=UUWW interval=1800s tz=Europe/Moscow
+2026-04-23 14:16:32 [INFO] bot.services.noaa: NOAA METAR: station=UUWW temp=3°C obsTime=2026-04-23T14:00:00.000Z raw=METAR UUWW 231400Z 34009MPS 9999 BKN013 OVC026 03/01 Q0992 WS R06 R06/290250 NOSIG
+2026-04-23 14:16:32 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:32 [WARNING] aiogram.dispatcher: Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 8723588566)
+2026-04-23 14:16:32 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:16:33 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:16:33 [INFO] bot.services.openmeteo: Open-Meteo daily forecast: 5 days, today_max=7.5
+2026-04-23 14:16:33 [INFO] bot.services.forecast: Forecast ensemble: 5 days (om=5, yx=7)
+2026-04-23 14:16:37 [INFO] bot: Starting weather bot: station=UUWW chat_id=707008589 llm=kimi-k2.6 via https://api.moonshot.ai/v1
+2026-04-23 14:16:37 [INFO] bot.scheduler: Scheduler starting: station=UUWW interval=1800s tz=Europe/Moscow
+2026-04-23 14:16:37 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:37 [WARNING] aiogram.dispatcher: Sleep for 1.339600 seconds and try again... (tryings = 1, bot id = 8723588566)
+2026-04-23 14:16:37 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:16:42 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:42 [WARNING] aiogram.dispatcher: Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 8723588566)
+2026-04-23 14:16:42 [INFO] bot.services.noaa: NOAA METAR: station=UUWW temp=3°C obsTime=2026-04-23T14:00:00.000Z raw=METAR UUWW 231400Z 34009MPS 9999 BKN013 OVC026 03/01 Q0992 WS R06 R06/290250 NOSIG
+2026-04-23 14:16:42 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:16:43 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:43 [WARNING] aiogram.dispatcher: Sleep for 1.839845 seconds and try again... (tryings = 2, bot id = 8723588566)
+2026-04-23 14:16:48 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:48 [WARNING] aiogram.dispatcher: Sleep for 1.238344 seconds and try again... (tryings = 1, bot id = 8723588566)
+2026-04-23 14:16:49 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:49 [WARNING] aiogram.dispatcher: Sleep for 2.302182 seconds and try again... (tryings = 3, bot id = 8723588566)
+2026-04-23 14:16:53 [INFO] bot.services.openmeteo: Open-Meteo daily forecast: 5 days, today_max=7.5
+2026-04-23 14:16:53 [INFO] bot.services.forecast: Forecast ensemble: 5 days (om=5, yx=7)
+2026-04-23 14:16:54 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:54 [WARNING] aiogram.dispatcher: Sleep for 1.648443 seconds and try again... (tryings = 2, bot id = 8723588566)
+2026-04-23 14:16:56 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:56 [WARNING] aiogram.dispatcher: Sleep for 2.933128 seconds and try again... (tryings = 4, bot id = 8723588566)
+2026-04-23 14:16:59 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:16:59 [WARNING] aiogram.dispatcher: Sleep for 2.094863 seconds and try again... (tryings = 3, bot id = 8723588566)
+2026-04-23 14:17:04 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:17:04 [WARNING] aiogram.dispatcher: Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 8723588566)
+2026-04-23 14:17:05 [ERROR] aiogram.dispatcher: Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2026-04-23 14:17:05 [WARNING] aiogram.dispatcher: Sleep for 2.764843 seconds and try again... (tryings = 4, bot id = 8723588566)
+[Thu 04/23/2026 14:18:03.68] --- bot starting (attempt=0) ---
+2026-04-23 14:18:12 [INFO] bot: Starting weather bot: station=UUWW chat_id=707008589 llm=kimi-k2.6 via https://api.moonshot.ai/v1
+2026-04-23 14:18:12 [INFO] bot.scheduler: Scheduler starting: station=UUWW interval=1800s tz=Europe/Moscow
+2026-04-23 14:18:12 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:18:12 [INFO] bot.services.noaa: NOAA METAR: station=UUWW temp=3°C obsTime=2026-04-23T14:00:00.000Z raw=METAR UUWW 231400Z 34009MPS 9999 BKN013 OVC026 03/01 Q0992 WS R06 R06/290250 NOSIG
+2026-04-23 14:18:12 [INFO] bot.services.yandex: Yandex observation: 2.0°C; hourly points: 88; daily points: 7
+2026-04-23 14:18:12 [INFO] bot.services.openmeteo: Open-Meteo daily forecast: 5 days, today_max=7.5
+2026-04-23 14:18:12 [INFO] bot.services.forecast: Forecast ensemble: 5 days (om=5, yx=7)
+2026-04-23 14:18:33 [INFO] bot.scheduler: Scheduler cancelled; exiting loop

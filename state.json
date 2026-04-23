@@ -1,0 +1,61 @@
+{
+  "last_noaa_temp_c": 3,
+  "last_yandex_temp_c": 2,
+  "daily_max_c": 10,
+  "daily_max_date": "2026-04-23",
+  "predicted_30min_c": 2,
+  "predicted_30min_target_iso": "2026-04-23T17:48+03:00",
+  "forecast_days": [
+    {
+      "date": "2026-04-23",
+      "open_meteo_c": 8,
+      "yandex_c": 3
+    },
+    {
+      "date": "2026-04-24",
+      "open_meteo_c": 6,
+      "yandex_c": 5
+    },
+    {
+      "date": "2026-04-25",
+      "open_meteo_c": 8,
+      "yandex_c": 9
+    },
+    {
+      "date": "2026-04-26",
+      "open_meteo_c": 10,
+      "yandex_c": 10
+    },
+    {
+      "date": "2026-04-27",
+      "open_meteo_c": 6,
+      "yandex_c": 4
+    }
+  ],
+  "forecast_fetched_at_iso": "2026-04-23T17:15+03:00",
+  "analysis_text": "Сегодня по METAR уже зафиксирован максимум 10°C при текущей температуре 3°C и дальнейшем падении до 2°C в ближайшие полчаса. Модели сильно расходятся: Open-Meteo даёт 8°C, Yandex — 3°C, разница в 5°C означает низкую уверенность в прогнозе. Для рынка Polymarket это говорит о том, что итоговое значение highest temperature с высокой вероятностью определено уже достигнутым дневным максимумом 10°C.",
+  "analysis_generated_at_iso": "2026-04-23T17:15+03:00",
+  "forecast_history": {
+    "2026-04-24": {
+      "open_meteo_c": 6,
+      "yandex_c": 6,
+      "first_seen_iso": "2026-04-23T02:26+03:00"
+    },
+    "2026-04-25": {
+      "open_meteo_c": 8,
+      "yandex_c": 9,
+      "first_seen_iso": "2026-04-23T02:26+03:00"
+    },
+    "2026-04-26": {
+      "open_meteo_c": 9,
+      "yandex_c": 9,
+      "first_seen_iso": "2026-04-23T02:26+03:00"
+    },
+    "2026-04-27": {
+      "open_meteo_c": 4,
+      "yandex_c": 4,
+      "first_seen_iso": "2026-04-23T02:26+03:00"
+    }
+  },
+  "verified_forecasts": []
+}

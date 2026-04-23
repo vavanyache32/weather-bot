@@ -1,0 +1,101 @@
+You are a senior Python backend engineer.
+
+Build a production-ready Telegram bot that tracks temperature updates for Moscow (Vnukovo airport station UUWW) and sends updates every 30 minutes.
+
+### Data sources (MUST USE BOTH):
+
+1. NOAA API (primary, must match Polymarket resolution logic):
+   https://api.weather.gov/stations/UUWW/observations/latest
+
+* Extract temperature from: properties.temperature.value
+* This value is in Kelvin → convert to Celsius
+* Round to whole °C (important, matches Polymarket rules)
+* Track the MAX temperature of the current day (00:00–23:59)
+
+2. Yandex Weather API (secondary comparison source):
+   https://api.weather.yandex.ru/
+
+* Use Moscow coordinates
+* Extract current temperature in Celsius
+
+---
+
+### Bot Requirements:
+
+* Use Python (aiogram or python-telegram-bot)
+* Use async architecture
+* Poll both APIs every 30 minutes
+* Store:
+
+  * last temperature
+  * daily max temperature (reset at midnight)
+
+---
+
+### Telegram Notifications:
+
+Send message ONLY if:
+
+* temperature changed
+  OR
+* new daily maximum reached
+
+---
+
+### Message format:
+
+Example:
+🌡 NOAA (Vnukovo): 9°C
+📈 Max today: 10°C
+🟡 Yandex: 8°C
+
+If new max:
+🔥 NEW DAILY MAX!
+
+---
+
+### Edge cases:
+
+* Handle API failures gracefully
+* Retry logic
+* If NOAA is down → still send Yandex
+* If temperature is null → skip
+
+---
+
+### Technical Requirements:
+
+* Use .env for:
+
+  * TELEGRAM_BOT_TOKEN
+  * YANDEX_API_KEY
+
+* Use proper logging
+
+* Use clean architecture (separate services)
+
+* Include requirements.txt
+
+---
+
+### Bonus (IMPORTANT):
+
+* Ensure bot logic strictly follows Polymarket resolution:
+  → MAX temperature of the day (not average, not latest)
+
+* Add command:
+  /status
+  → returns current temp + daily max
+
+---
+
+### Output:
+
+Provide:
+
+1. Full working code
+2. requirements.txt
+3. Setup instructions
+4. Example .env
+
+Make code clean and production-ready, not a prototype.
