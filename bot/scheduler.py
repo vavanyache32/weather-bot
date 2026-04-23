@@ -217,6 +217,7 @@ class WeatherScheduler:
                 yandex_temp=yandex_temp,
                 predicted_30min_c=predicted_temp,
                 new_max=new_max,
+                now_local=now_local,
             )
             try:
                 await self._bot.send_message(
@@ -429,8 +430,12 @@ def format_update_message(
     yandex_temp: Optional[int],
     predicted_30min_c: Optional[int],
     new_max: bool,
+    now_local: Optional[datetime] = None,
 ) -> str:
     lines: list[str] = []
+    if now_local is not None:
+        time_str = now_local.strftime("%H:%M")
+        lines.append(f"⏰ {time_str} (МСК)")
     lines.append(
         f"🌡 NOAA (Vnukovo): {noaa_temp}°C"
         if noaa_temp is not None

@@ -220,14 +220,16 @@ Smoke test that everything imports and the scheduler message formatter
 works without touching the network:
 
 ```bash
-python -c "from bot.scheduler import format_update_message; print(format_update_message(9, 10, 8, True))"
+python -c "from bot.scheduler import format_update_message; from datetime import datetime; from zoneinfo import ZoneInfo; dt = datetime(2026,4,23,19,0,tzinfo=ZoneInfo('Europe/Moscow')); print(format_update_message(9, 10, 8, 7, True, now_local=dt))"
 ```
 
 Expected:
 
 ```
+⏰ 19:00 (МСК)
 🌡 NOAA (Vnukovo): 9°C
 📈 Max today: 10°C
 🟡 Yandex: 8°C
+🔮 Через 30 мин: 7°C (Yandex)
 🔥 NEW DAILY MAX!
 ```
