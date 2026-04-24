@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 
 import aiohttp
 from aiogram import Bot, Dispatcher
@@ -99,7 +100,9 @@ async def _amain() -> None:
 
         scheduler_task = asyncio.create_task(scheduler.run(), name="scheduler")
         try:
-            await dp.start_polling(bot, handle_signals=False)
+            # handle_signals=True breaks pythonw.exe on Windows; on Linux we
+            # need it so aiogram catches SIGTERM from systemd gracefully.
+            await dp.start_polling(bot, handle_signals=(sys.platform != "win32"))
         finally:
             scheduler_task.cancel()
             try:
@@ -115,8 +118,8 @@ def main() -> None:
     except ConfigError as exc:
         logging.basicConfig(level=logging.ERROR)
         logging.getLogger("bot").error("Configuration error: %s", exc)
-        raise SystemExit(2)
-    except (KeyboardInterrupt, SystemExit):
+        raise SystemExit(2) from exc
+    except KeyboardInterrupt:
         pass
 
 

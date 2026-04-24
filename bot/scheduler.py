@@ -7,10 +7,8 @@ Notification rules (matches the product spec):
 * Track the **max** NOAA temperature for the current day (Moscow local
   time), resetting at local midnight.  This matches Polymarket's
   resolution semantics: daily max, not average / not latest.
-* Send a Telegram message on every poll as long as at least one source
-  returns a valid temperature.  (Previously we only notified on change;
-  the requirement was updated to always push so the user sees the bot is
-  alive.)
+* Send a Telegram message when NOAA or Yandex temperature changes,
+  or when a new daily maximum is reached.
 * If NOAA is unavailable but Yandex is, still notify so the user is not
   left in the dark.
 * If both sources return ``None``, skip silently and log.
@@ -113,8 +111,12 @@ class WeatherScheduler:
             or (now_local - self._last_yandex_fetch).total_seconds() >= 600
         ):
             yandex_reading = await self._yandex.fetch()
-            self._last_yandex_reading = yandex_reading
-            self._last_yandex_fetch = now_local
+            if yandex_reading is not None:
+                self._last_yandex_reading = yandex_reading
+                self._last_yandex_fetch = now_local
+            else:
+                # Keep previous reading on transient failure; retry on next tick.
+                yandex_reading = self._last_yandex_reading
         else:
             yandex_reading = self._last_yandex_reading
 
@@ -173,8 +175,6 @@ class WeatherScheduler:
             # NOAA is down but Yandex is up — notify at least once so the
             # user knows we're falling back to the secondary source.
             should_notify = True
-
-
 
         # Persist: only overwrite last_*_temp when we actually got a reading,
         # so comparisons stay stable across transient failures.
@@ -235,7 +235,7 @@ class WeatherScheduler:
                 logger.exception("Telegram send failed")
         else:
             logger.info(
-                "No change (both sources null): noaa=%s max=%s yandex=%s",
+                "No change: noaa=%s max=%s yandex=%s",
                 noaa_temp,
                 state.daily_max_c,
                 yandex_temp,

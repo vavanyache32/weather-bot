@@ -5,9 +5,9 @@ After=network.target
 [Service]
 Type=simple
 # Укажи своего пользователя на сервере (ubuntu, root, deployer и т.д.)
-User=ubuntu
-WorkingDirectory=/home/ubuntu/weatherapp
-ExecStart=/home/ubuntu/weatherapp/.venv/bin/python -m bot
+User=root
+WorkingDirectory=/root/weatherapp
+ExecStart=/root/weatherapp/.venv/bin/python -m bot
 Restart=always
 RestartSec=10
 
