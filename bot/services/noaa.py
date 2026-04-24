@@ -27,6 +27,7 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 AWC_METAR_URL = "https://aviationweather.gov/api/data/metar"
+MESONET_URL = "https://mesonet.agron.iastate.edu/json/current.py"
 
 
 class NOAAService:
@@ -47,8 +48,55 @@ class NOAAService:
         self._timeout = aiohttp.ClientTimeout(total=timeout_seconds)
         self._retries = max(1, retries)
 
+    async def _fetch_mesonet(self) -> Optional[float]:
+        """Fast path: Iowa State Mesonet serves UUWW updates quicker than AWC."""
+        params = {"station": self._station, "network": "RU__ASOS"}
+        try:
+            async with self._session.get(
+                MESONET_URL,
+                params=params,
+                headers=self._headers,
+                timeout=self._timeout,
+            ) as resp:
+                resp.raise_for_status()
+                data = await resp.json(content_type=None)
+        except Exception as exc:
+            logger.debug("Mesonet fetch failed: %s", exc)
+            return None
+
+        if not isinstance(data, dict):
+            return None
+        last_ob = data.get("last_ob")
+        if not isinstance(last_ob, dict):
+            return None
+
+        temp_f = last_ob.get("airtemp[F]")
+        if temp_f is None:
+            return None
+        try:
+            temp_f = float(temp_f)
+        except (TypeError, ValueError):
+            return None
+
+        temp_c = (temp_f - 32) * 5 / 9
+        logger.info(
+            "Mesonet: station=%s temp=%.1f°F -> %.2f°C utc_valid=%s raw=%s",
+            self._station,
+            temp_f,
+            temp_c,
+            last_ob.get("utc_valid"),
+            last_ob.get("raw", "n/a"),
+        )
+        return temp_c
+
     async def get_temperature_c(self) -> Optional[float]:
         """Return the latest METAR temperature in Celsius, or None on failure."""
+        # Try fast Mesonet first (updates quicker than AWC JSON API).
+        mesonet_temp = await self._fetch_mesonet()
+        if mesonet_temp is not None:
+            return mesonet_temp
+
+        # Fallback to official Aviation Weather Center METAR API.
         params = {
             "ids": self._station,
             "format": "json",

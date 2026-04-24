@@ -107,11 +107,7 @@ class WeatherScheduler:
         # Throttle Yandex so we don't burn API quota when polling NOAA
         # every minute. 10 min is more than enough for current temp + hourly.
         now_local = datetime.now(self._tz)
-        # NOAA typically updates forecasts on the hour or half-hour.
-        # Show that issue time rather than the exact send time.
-        report_time = now_local.replace(
-            minute=(now_local.minute // 30) * 30, second=0, microsecond=0
-        )
+
         if (
             self._last_yandex_fetch is None
             or (now_local - self._last_yandex_fetch).total_seconds() >= 600
@@ -178,13 +174,7 @@ class WeatherScheduler:
             # user knows we're falling back to the secondary source.
             should_notify = True
 
-        # Deduplicate: only one notification per report time (e.g. 17:00).
-        if should_notify and state.last_notified_report_time_iso == report_time.isoformat(timespec="minutes"):
-            should_notify = False
-            logger.info(
-                "Already notified for %s; skipping duplicate",
-                report_time.isoformat(timespec="minutes"),
-            )
+
 
         # Persist: only overwrite last_*_temp when we actually got a reading,
         # so comparisons stay stable across transient failures.
@@ -230,18 +220,14 @@ class WeatherScheduler:
                 yandex_temp=yandex_temp,
                 predicted_30min_c=predicted_temp,
                 new_max=new_max,
-                now_local=report_time,
+                now_local=now_local,
             )
             try:
                 await self._bot.send_message(
                     self._config.telegram_chat_id, message
                 )
                 notified = True
-                await self._store.update(
-                    last_notified_report_time_iso=report_time.isoformat(
-                        timespec="minutes"
-                    )
-                )
+
                 logger.info(
                     "Sent update: %s", message.replace("\n", " | ")
                 )
