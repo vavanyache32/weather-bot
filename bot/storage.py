@@ -33,6 +33,8 @@ class WeatherState:
     # Optional LLM analysis text (annotates the forecast; never a prediction).
     analysis_text: Optional[str] = None
     analysis_generated_at_iso: Optional[str] = None
+    # Last report time for which a notification was already sent (dedup).
+    last_notified_report_time_iso: Optional[str] = None
 
     # --- Forecast-vs-actual backtest data ---
     # Dict keyed by ISO date → first-seen forecast for that FUTURE date:
