@@ -96,6 +96,9 @@ class Config:
     meteoinfo_enabled: bool = False
     meteoinfo_interval_seconds: int = 10800  # 3 hours
 
+    # --- Notifications ---
+    notify_min_interval_seconds: int = 1800  # min 30 min between temp-change msgs
+
     # --- Alerts ---
     alerts_enabled: bool = True
     alerts_config_path: Path | None = Path("alerts.yaml")
@@ -212,6 +215,9 @@ def load_config() -> Config:
     meteoinfo_enabled = os.environ.get("METEOINFO_ENABLED", "false").lower() in ("1", "true", "yes")
     meteoinfo_interval = int(os.environ.get("METEOINFO_INTERVAL_SECONDS", 10800))
 
+    # Notifications
+    notify_min_interval = int(os.environ.get("NOTIFY_MIN_INTERVAL_SECONDS", 1800))
+
     # Alerts
     alerts_enabled = os.environ.get("ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
     alerts_config_path_raw = (os.environ.get("ALERTS_CONFIG_PATH") or "").strip()
@@ -259,6 +265,7 @@ def load_config() -> Config:
         taf_interval_seconds=taf_interval,
         meteoinfo_enabled=meteoinfo_enabled,
         meteoinfo_interval_seconds=meteoinfo_interval,
+        notify_min_interval_seconds=notify_min_interval,
         alerts_enabled=alerts_enabled,
         alerts_config_path=alerts_config_path,
         webhook_url=webhook_url,

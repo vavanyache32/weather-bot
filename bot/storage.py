@@ -54,6 +54,8 @@ class WeatherState:
     daily_max_confirmed_by: list = None  # type: ignore[assignment]
     # --- Detailed forecast aggregates (consensus, band, spread) ---
     forecast_aggregates: list = None  # type: ignore[assignment]
+    # When the last Telegram notification was sent (ISO, local tz).
+    last_notification_at_iso: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.forecast_days is None:

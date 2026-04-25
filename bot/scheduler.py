@@ -381,16 +381,28 @@ class WeatherScheduler:
                 state.daily_max_c = new_daily_max
                 new_max = True
 
-        # Notify only when something actually changed so the user isn't
-        # spammed on every tick.
+        # Notify rules:
+        #   * new daily max        → always
+        #   * NOAA temp changed    → only if enough time passed since last notify
+        #   * Yandex alone         → never (too noisy)
+        #   * NOAA down, Yandex up → once per outage
         should_notify = False
         notified_noaa_down = state.notified_noaa_down
+
+        # Throttle: min seconds between ordinary temperature-change messages.
+        last_notify_iso = state.last_notification_at_iso
+        last_notify = datetime.fromisoformat(last_notify_iso) if last_notify_iso else None
+        notify_cooldown = self._config.notify_min_interval_seconds
+        cooldown_ok = (
+            last_notify is None
+            or (now_local - last_notify).total_seconds() >= notify_cooldown
+        )
+
         if new_max:
             should_notify = True
         elif noaa_temp is not None and noaa_temp != state.last_noaa_temp_c:
-            should_notify = True
-        elif yandex_temp is not None and yandex_temp != state.last_yandex_temp_c:
-            should_notify = True
+            if cooldown_ok:
+                should_notify = True
         elif noaa_temp is None and yandex_temp is not None:
             # NOAA is down but Yandex is up — notify once.
             if not state.notified_noaa_down:
@@ -470,6 +482,9 @@ class WeatherScheduler:
                     self._config.telegram_chat_id, message
                 )
                 notified = True
+                await self._store.update(
+                    last_notification_at_iso=now_local.isoformat(timespec="minutes")
+                )
 
                 logger.info(
                     "Sent update: %s", message.replace("\n", " | ")
