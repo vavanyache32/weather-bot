@@ -56,6 +56,8 @@ class WeatherState:
     forecast_aggregates: list = None  # type: ignore[assignment]
     # When the last Telegram notification was sent (ISO, local tz).
     last_notification_at_iso: Optional[str] = None
+    # METAR observation time of the last processed NOAA reading.
+    last_noaa_obs_time_iso: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.forecast_days is None:

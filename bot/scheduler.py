@@ -247,7 +247,7 @@ class WeatherScheduler:
 
     async def tick(self) -> TickResult:
         """Run one poll + maybe-notify cycle. Returns a summary for tests."""
-        noaa_raw = await self._noaa.get_temperature_c()
+        noaa_raw, noaa_obs_time = await self._noaa.get_latest()
 
         # Throttle Yandex so we don't burn API quota when polling NOAA
         # every minute. 10 min is more than enough for current temp + hourly.
@@ -383,11 +383,17 @@ class WeatherScheduler:
 
         # Notify rules:
         #   * new daily max        → always
-        #   * NOAA temp changed    → only if enough time passed since last notify
+        #   * brand-new METAR      → notify immediately (bypass throttle)
+        #   * same METAR, temp drift → throttle
         #   * Yandex alone         → never (too noisy)
         #   * NOAA down, Yandex up → once per outage
         should_notify = False
         notified_noaa_down = state.notified_noaa_down
+
+        is_new_metar = (
+            noaa_obs_time is not None
+            and noaa_obs_time != state.last_noaa_obs_time_iso
+        )
 
         # Throttle: min seconds between ordinary temperature-change messages.
         last_notify_iso = state.last_notification_at_iso
@@ -401,7 +407,7 @@ class WeatherScheduler:
         if new_max:
             should_notify = True
         elif noaa_temp is not None and noaa_temp != state.last_noaa_temp_c:
-            if cooldown_ok:
+            if is_new_metar or cooldown_ok:
                 should_notify = True
         elif noaa_temp is None and yandex_temp is not None:
             # NOAA is down but Yandex is up — notify once.
@@ -432,6 +438,9 @@ class WeatherScheduler:
             ),
             notified_noaa_down=(
                 False if noaa_temp is not None else notified_noaa_down
+            ),
+            last_noaa_obs_time_iso=(
+                noaa_obs_time if noaa_obs_time is not None else state.last_noaa_obs_time_iso
             ),
             observations=[
                 {

@@ -48,8 +48,11 @@ class NOAAService:
         self._timeout = aiohttp.ClientTimeout(total=timeout_seconds)
         self._retries = max(1, retries)
 
-    async def _fetch_mesonet(self) -> Optional[float]:
-        """Fast path: Iowa State Mesonet serves UUWW updates quicker than AWC."""
+    async def _fetch_mesonet_full(self) -> Optional[tuple[float, str]]:
+        """Fast path: Iowa State Mesonet serves UUWW updates quicker than AWC.
+
+        Returns (temp_c, utc_valid_iso) or None on failure.
+        """
         params = {"station": self._station, "network": "RU__ASOS"}
         try:
             async with self._session.get(
@@ -79,22 +82,32 @@ class NOAAService:
             return None
 
         temp_c = (temp_f - 32) * 5 / 9
+        utc_valid = last_ob.get("utc_valid")
         logger.info(
             "Mesonet: station=%s temp=%.1f°F -> %.2f°C utc_valid=%s raw=%s",
             self._station,
             temp_f,
             temp_c,
-            last_ob.get("utc_valid"),
+            utc_valid,
             last_ob.get("raw", "n/a"),
         )
-        return temp_c
+        return temp_c, utc_valid
 
-    async def get_temperature_c(self) -> Optional[float]:
-        """Return the latest METAR temperature in Celsius, or None on failure."""
+    async def _fetch_mesonet(self) -> Optional[float]:
+        """Convenience wrapper that returns only the temperature."""
+        result = await self._fetch_mesonet_full()
+        return result[0] if result is not None else None
+
+    async def get_latest(self) -> tuple[Optional[float], Optional[str]]:
+        """Return (temperature_c, obs_time_iso) from the latest METAR.
+
+        obs_time_iso is the METAR observation time (e.g. '2026-04-25T20:00:00Z').
+        Used by the scheduler to detect brand-new METARs and bypass throttle.
+        """
         # Try fast Mesonet first (updates quicker than AWC JSON API).
-        mesonet_temp = await self._fetch_mesonet()
-        if mesonet_temp is not None:
-            return mesonet_temp
+        mesonet = await self._fetch_mesonet_full()
+        if mesonet is not None:
+            return mesonet
 
         # Fallback to official Aviation Weather Center METAR API.
         params = {
@@ -114,7 +127,6 @@ class NOAAService:
                     timeout=self._timeout,
                 ) as resp:
                     resp.raise_for_status()
-                    # AWC sometimes serves application/json, sometimes text/json.
                     data = await resp.json(content_type=None)
             except Exception as exc:
                 last_err = exc
@@ -132,7 +144,7 @@ class NOAAService:
                 logger.warning(
                     "NOAA METAR returned no observations for %s", self._station
                 )
-                return None
+                return None, None
 
             latest = max(
                 (r for r in data if isinstance(r, dict)),
@@ -141,7 +153,7 @@ class NOAAService:
             )
             if latest is None:
                 logger.warning("NOAA METAR returned unexpected shape: %r", data)
-                return None
+                return None, None
 
             temp = latest.get("temp")
             if temp is None:
@@ -150,26 +162,32 @@ class NOAAService:
                     self._station,
                     latest.get("rawOb"),
                 )
-                return None
+                return None, None
 
             try:
                 celsius = float(temp)
             except (TypeError, ValueError):
                 logger.warning("NOAA METAR non-numeric temp %r", temp)
-                return None
+                return None, None
 
+            obs_time = latest.get("reportTime") or latest.get("obsTime")
             logger.info(
                 "NOAA METAR: station=%s temp=%s°C obsTime=%s raw=%s",
                 self._station,
                 temp,
-                latest.get("reportTime") or latest.get("obsTime"),
+                obs_time,
                 latest.get("rawOb"),
             )
-            return celsius
+            return celsius, obs_time
 
         logger.error(
             "NOAA METAR fetch failed after %d attempts: %s",
             self._retries,
             last_err,
         )
-        return None
+        return None, None
+
+    async def get_temperature_c(self) -> Optional[float]:
+        """Return the latest METAR temperature in Celsius, or None on failure."""
+        temp, _ = await self.get_latest()
+        return temp
