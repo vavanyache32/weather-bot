@@ -41,7 +41,9 @@ class ForecastAggregator:
         )
 
         # Separate deterministic vs quantile rows
-        deterministic: list[tuple[str, Optional[str], float]] = []
+        from collections import defaultdict
+
+        det_groups: dict[tuple[str, Optional[str]], list[float]] = defaultdict(list)
         quantile_rows: list[tuple[float, float]] = []  # (quantile, value)
 
         for row in rows:
@@ -51,7 +53,13 @@ class ForecastAggregator:
             if q is not None:
                 quantile_rows.append((q, float(tmax)))
             else:
-                deterministic.append((source, model, float(tmax)))
+                det_groups[(source, model)].append(float(tmax))
+
+        # De-duplicate: one value per (source, model) — median if multiple runs
+        deterministic: list[tuple[str, Optional[str], float]] = [
+            (source, model, median(temps))
+            for (source, model), temps in sorted(det_groups.items())
+        ]
 
         if not deterministic and not quantile_rows:
             return DailyForecastAggregate(station=station, valid_date=valid_date)

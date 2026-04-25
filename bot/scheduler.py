@@ -64,6 +64,27 @@ FORECAST_HISTORY_PRUNE_DAYS = 14
 
 logger = logging.getLogger(__name__)
 
+# Human-readable labels for forecast models shown in Telegram.
+_MODEL_LABELS: dict[str, str] = {
+    "ecmwf_ifs025": "ECMWF",
+    "gfs_seamless": "GFS",
+    "icon_seamless": "ICON",
+    "gem_seamless": "GEM",
+    "meteofrance_seamless": "Météo-France",
+    "jma_seamless": "JMA",
+    "ukmo_seamless": "UKMO",
+    "met_norway_mix": "MET Norway",
+    "TAF": "TAF",
+    "open_meteo": "Open-Meteo",
+    "yandex": "Yandex",
+}
+
+
+def _model_label(model: Optional[str]) -> str:
+    if not model:
+        return "?"
+    return _MODEL_LABELS.get(model, model)
+
 
 @dataclass
 class TickResult:
@@ -656,10 +677,34 @@ class WeatherScheduler:
                         "band_high_c": agg.band_high_c,
                         "model_spread_c": agg.model_spread_c,
                         "mixed_forecast_c": agg.mixed_forecast_c,
-                        "models": agg.models,
-                        "sources_used": agg.sources_used,
+                        "models": list(agg.models),
+                        "sources_used": list(agg.sources_used),
                     }
                 )
+
+            # Enrich with legacy Yandex / old Open-Meteo so the user still sees them
+            state_now = await self._store.get()
+            for d in state_now.forecast_days or []:
+                date_iso = d.get("date")
+                if not date_iso:
+                    continue
+                for ad in aggregate_dicts:
+                    if ad["valid_date"] != date_iso:
+                        continue
+                    om = d.get("open_meteo_c")
+                    yx = d.get("yandex_c")
+                    if om is not None:
+                        ad["models"].append(("open_meteo", "Open-Meteo", float(om)))
+                    if yx is not None:
+                        ad["models"].append(("yandex", "Yandex", float(yx)))
+                    # Recompute consensus & spread with legacy sources included
+                    vals = [v for _, _, v in ad["models"]]
+                    if vals:
+                        from statistics import median
+                        ad["consensus_c"] = median(vals)
+                        ad["model_spread_c"] = max(vals) - min(vals)
+                    break
+
             await self._store.update(forecast_aggregates=aggregate_dicts)
 
         self._last_detailed_refresh = now_local
@@ -904,11 +949,18 @@ def _format_detailed_forecast(state: WeatherState) -> str:
         lines.append(line)
 
         if models:
-            model_parts = []
-            for source, model, val in models[:6]:
-                label = model or source
+            seen: set[str] = set()
+            model_parts: list[str] = []
+            for source, model, val in models:
+                label = _model_label(model) if model else _model_label(source)
+                if label in seen:
+                    continue
+                seen.add(label)
                 model_parts.append(f"{label} {val:.1f}°C")
-            lines.append("   " + " | ".join(model_parts))
+                if len(model_parts) >= 6:
+                    break
+            if model_parts:
+                lines.append("   " + " | ".join(model_parts))
 
     if state.daily_max_c is not None:
         lines.append(f"📈 Фактический макс сегодня: {state.daily_max_c}°C")
@@ -979,11 +1031,18 @@ def format_day_aggregate_message(
         lines.append(f"📊 Диапазон P10..P90: <b>{band_low:.1f}..{band_high:.1f}°C</b>")
 
     if models:
+        seen: set[str] = set()
         parts: list[str] = []
-        for source, model, val in models[:8]:
-            label = model or source
+        for source, model, val in models:
+            label = _model_label(model) if model else _model_label(source)
+            if label in seen:
+                continue
+            seen.add(label)
             parts.append(f"{label} {val:.1f}°C")
-        lines.append(f"🧩 Модели: {', '.join(parts)}")
+            if len(parts) >= 8:
+                break
+        if parts:
+            lines.append(f"🧩 Модели: {', '.join(parts)}")
     else:
         lines.append("🧩 Модели: нет данных")
 
