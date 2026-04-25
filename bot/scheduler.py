@@ -838,33 +838,35 @@ def format_update_message(
     daily_max_source: Optional[str] = None,
     daily_max_confirmed_by: Optional[list[str]] = None,
 ) -> str:
+    """Build the live temperature update pushed to Telegram."""
     lines: list[str] = []
     if now_local is not None:
         time_str = now_local.strftime("%H:%M")
-        lines.append(f"⏰ {time_str} (МСК)")
+        lines.append(f"⏰ {time_str}")
     lines.append(
-        f"🌡 NOAA (Vnukovo): {noaa_temp}°C"
+        f"🌡 Внуково (METAR): {noaa_temp}°C"
         if noaa_temp is not None
-        else "🌡 NOAA (Vnukovo): n/a"
+        else "🌡 Внуково (METAR): н/д"
     )
     if daily_max_c is not None:
-        max_line = f"📈 Max today: {daily_max_c}°C"
-        if daily_max_source:
-            max_line += f" ({daily_max_source})"
-        if daily_max_confirmed_by:
-            max_line += f", confirmed: {', '.join(daily_max_confirmed_by)}"
+        max_line = f"📈 Макс сегодня: {daily_max_c}°C"
+        # Minimal human-readable hint, nothing technical.
+        if daily_max_source and "explicit" in daily_max_source:
+            max_line += " (по официальным данным)"
+        elif daily_max_source == "point_max":
+            max_line += " (по текущим замерам)"
         lines.append(max_line)
     else:
-        lines.append("📈 Max today: n/a")
+        lines.append("📈 Макс сегодня: н/д")
     lines.append(
-        f"🟡 Yandex: {yandex_temp}°C"
+        f"🟡 Яндекс: {yandex_temp}°C"
         if yandex_temp is not None
-        else "🟡 Yandex: n/a"
+        else "🟡 Яндекс: н/д"
     )
     if predicted_30min_c is not None:
-        lines.append(f"🔮 Через 30 мин: {predicted_30min_c}°C (Yandex)")
+        lines.append(f"🔮 Через ~30 мин: {predicted_30min_c}°C")
     if new_max:
-        lines.append("🔥 NEW DAILY MAX!")
+        lines.append("🔥 Новый дневной максимум!")
     return "\n".join(lines)
 
 
@@ -1200,26 +1202,26 @@ def _format_verified_row(e: dict) -> str:
 
 def format_status_message(state: WeatherState) -> str:
     lines = [
-        f"🌡 NOAA (Vnukovo): {state.last_noaa_temp_c}°C"
+        f"🌡 Внуково (METAR): {state.last_noaa_temp_c}°C"
         if state.last_noaa_temp_c is not None
-        else "🌡 NOAA (Vnukovo): n/a",
+        else "🌡 Внуково (METAR): н/д",
     ]
     if state.daily_max_c is not None:
-        max_line = f"📈 Max today: {state.daily_max_c}°C"
-        if state.daily_max_source:
-            max_line += f" ({state.daily_max_source})"
-        if state.daily_max_confirmed_by:
-            max_line += f", confirmed: {', '.join(state.daily_max_confirmed_by)}"
+        max_line = f"📈 Макс сегодня: {state.daily_max_c}°C"
+        if state.daily_max_source and "explicit" in state.daily_max_source:
+            max_line += " (по официальным данным)"
+        elif state.daily_max_source == "point_max":
+            max_line += " (по текущим замерам)"
         lines.append(max_line)
     else:
-        lines.append("📈 Max today: n/a")
+        lines.append("📈 Макс сегодня: н/д")
     lines.append(
-        f"🟡 Yandex: {state.last_yandex_temp_c}°C"
+        f"🟡 Яндекс: {state.last_yandex_temp_c}°C"
         if state.last_yandex_temp_c is not None
-        else "🟡 Yandex: n/a",
+        else "🟡 Яндекс: н/д",
     )
     if state.predicted_30min_c is not None:
         lines.append(
-            f"🔮 Через 30 мин: {state.predicted_30min_c}°C (Yandex)"
+            f"🔮 Через ~30 мин: {state.predicted_30min_c}°C"
         )
     return "\n".join(lines)
