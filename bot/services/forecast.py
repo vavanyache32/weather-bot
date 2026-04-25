@@ -82,7 +82,14 @@ class ForecastService:
         open_meteo_task = asyncio.create_task(self._open_meteo.fetch_daily())
         yandex_task = asyncio.create_task(self._yandex.fetch())
 
-        om_list, yx_reading = await asyncio.gather(open_meteo_task, yandex_task)
+        results = await asyncio.gather(
+            open_meteo_task, yandex_task, return_exceptions=True
+        )
+        om_list = None if isinstance(results[0], Exception) else results[0]
+        yx_reading = None if isinstance(results[1], Exception) else results[1]
+        for idx, res in enumerate(results):
+            if isinstance(res, Exception):
+                logger.warning("Forecast source %d failed: %s", idx, res)
 
         om_by_date: dict[date, DailyExtremes] = {}
         if om_list:

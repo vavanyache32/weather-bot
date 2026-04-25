@@ -71,6 +71,7 @@ async def _amain() -> None:
             timeout_seconds=config.http_timeout_seconds,
             retries=config.http_retries,
             forecast_days=config.forecast_days,
+            user_agent=config.http_user_agent,
         )
         forecast = ForecastService(open_meteo=open_meteo, yandex=yandex)
         llm = LLMService(
@@ -109,6 +110,7 @@ async def _amain() -> None:
                 await scheduler_task
             except asyncio.CancelledError:
                 pass
+            await store.close()
             await bot.session.close()
 
 

@@ -18,14 +18,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 import aiohttp
 
-# Forward-declared for typing without circular imports.
-from .openmeteo import DailyExtremes  # noqa: E402  (re-used as a simple "day + max" record)
+from ..models import DailyExtremes
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +156,10 @@ class YandexService:
                     temp_f = float(temp)
                 except (TypeError, ValueError):
                     continue
-                dt = datetime(d.year, d.month, d.day, hour_i, 0, tzinfo=self._tz)
+                if hour_i == 24:
+                    dt = datetime(d.year, d.month, d.day, 0, 0, tzinfo=self._tz) + timedelta(days=1)
+                else:
+                    dt = datetime(d.year, d.month, d.day, hour_i, 0, tzinfo=self._tz)
                 out.append((dt, temp_f))
         out.sort(key=lambda x: x[0])
         return out

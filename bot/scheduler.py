@@ -23,6 +23,13 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
+
+
+def _round_half_up(value: float) -> int:
+    """Round using "round half up" (not Python's banker's rounding)."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 from aiogram.exceptions import TelegramAPIError
 
 from .config import Config
@@ -123,8 +130,8 @@ class WeatherScheduler:
         yandex_raw = yandex_reading.current_c if yandex_reading else None
 
         # Per Polymarket rules: round to whole degrees Celsius.
-        noaa_temp = round(noaa_raw) if noaa_raw is not None else None
-        yandex_temp = round(yandex_raw) if yandex_raw is not None else None
+        noaa_temp = _round_half_up(noaa_raw) if noaa_raw is not None else None
+        yandex_temp = _round_half_up(yandex_raw) if yandex_raw is not None else None
 
         # Short-term forecast (Yandex hourly, linearly interpolated to +30m).
         target = now_local + FORECAST_HORIZON
@@ -133,7 +140,7 @@ class WeatherScheduler:
             if yandex_reading
             else None
         )
-        predicted_temp = round(predicted_raw) if predicted_raw is not None else None
+        predicted_temp = _round_half_up(predicted_raw) if predicted_raw is not None else None
 
         today_iso = now_local.date().isoformat()
         state = await self._store.get()
@@ -165,6 +172,7 @@ class WeatherScheduler:
         # Notify only when something actually changed so the user isn't
         # spammed on every tick.
         should_notify = False
+        notified_noaa_down = state.notified_noaa_down
         if new_max:
             should_notify = True
         elif noaa_temp is not None and noaa_temp != state.last_noaa_temp_c:
@@ -172,9 +180,10 @@ class WeatherScheduler:
         elif yandex_temp is not None and yandex_temp != state.last_yandex_temp_c:
             should_notify = True
         elif noaa_temp is None and yandex_temp is not None:
-            # NOAA is down but Yandex is up — notify at least once so the
-            # user knows we're falling back to the secondary source.
-            should_notify = True
+            # NOAA is down but Yandex is up — notify once.
+            if not state.notified_noaa_down:
+                should_notify = True
+                notified_noaa_down = True
 
         # Persist: only overwrite last_*_temp when we actually got a reading,
         # so comparisons stay stable across transient failures.
@@ -196,6 +205,9 @@ class WeatherScheduler:
                 target.isoformat(timespec="minutes")
                 if predicted_temp is not None
                 else state.predicted_30min_target_iso
+            ),
+            notified_noaa_down=(
+                False if noaa_temp is not None else notified_noaa_down
             ),
         )
 
@@ -400,8 +412,6 @@ class WeatherScheduler:
                 "Day %s finalised without a prior forecast — skipping backtest entry",
                 date_iso,
             )
-            # Still persist the pruned history dict below.
-            await self._store.update(forecast_history=history)
             return
 
         entry = {

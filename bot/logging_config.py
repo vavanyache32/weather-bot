@@ -5,14 +5,14 @@ import logging
 import logging.handlers
 import sys
 from pathlib import Path
-
+from typing import Optional
 
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# Log file lives next to the project root (two levels up from this file:
+# Default log file lives next to the project root (two levels up from this file:
 # bot/logging_config.py -> bot/ -> <project root>).
-_LOG_FILE = Path(__file__).resolve().parent.parent / "bot.log"
+_DEFAULT_LOG_FILE = Path(__file__).resolve().parent.parent / "bot.log"
 
 
 def _stdout_is_usable() -> bool:
@@ -32,7 +32,7 @@ def _stdout_is_usable() -> bool:
     return fd >= 0
 
 
-def setup_logging(level: str = "INFO") -> None:
+def setup_logging(level: str = "INFO", log_file: Optional[Path] = None) -> None:
     """Configure root logging once for the whole process.
 
     Always attaches a RotatingFileHandler writing to ``<project>/bot.log`` so
@@ -47,12 +47,13 @@ def setup_logging(level: str = "INFO") -> None:
         return
 
     formatter = logging.Formatter(fmt=_LOG_FORMAT, datefmt=_DATE_FORMAT)
+    target_file = log_file or _DEFAULT_LOG_FILE
 
     # File handler: 5 MB x 3 backups, appended, UTF-8.
     try:
-        _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        target_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.handlers.RotatingFileHandler(
-            _LOG_FILE,
+            target_file,
             maxBytes=5 * 1024 * 1024,
             backupCount=3,
             encoding="utf-8",

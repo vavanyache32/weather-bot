@@ -12,7 +12,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +33,8 @@ class WeatherState:
     # Optional LLM analysis text (annotates the forecast; never a prediction).
     analysis_text: Optional[str] = None
     analysis_generated_at_iso: Optional[str] = None
-    # Last report time for which a notification was already sent (dedup).
-    last_notified_report_time_iso: Optional[str] = None
+    # Flag to deduplicate "NOAA is down, falling back to Yandex" notifications.
+    notified_noaa_down: bool = False
 
     # --- Forecast-vs-actual backtest data ---
     # Dict keyed by ISO date → first-seen forecast for that FUTURE date:
@@ -56,12 +56,23 @@ class WeatherState:
 
 
 class StateStore:
-    """Thread-safe (within a single event loop) JSON-backed state store."""
+    """Thread-safe (within a single event loop) JSON-backed state store.
 
-    def __init__(self, path: Path) -> None:
+    Writes are debounced so that rapid successive updates (e.g. tick + forecast
+    refresh) coalesce into a single disk flush.
+    """
+
+    def __init__(
+        self,
+        path: Path,
+        flush_interval: float = 4.0,
+    ) -> None:
         self._path = path
         self._lock = asyncio.Lock()
         self._state = self._load()
+        self._flush_interval = flush_interval
+        self._dirty = False
+        self._flush_task: Optional[asyncio.Task] = None
 
     # ---------- internal ----------
 
@@ -84,6 +95,19 @@ class StateStore:
             encoding="utf-8",
         )
         tmp.replace(self._path)
+        self._dirty = False
+        logger.debug("State persisted to %s", self._path)
+
+    async def _debounced_flush(self) -> None:
+        await asyncio.sleep(self._flush_interval)
+        async with self._lock:
+            if self._dirty:
+                self._persist_locked()
+
+    def _trigger_flush(self) -> None:
+        self._dirty = True
+        if self._flush_task is None or self._flush_task.done():
+            self._flush_task = asyncio.create_task(self._debounced_flush())
 
     @staticmethod
     def _snapshot(state: WeatherState) -> WeatherState:
@@ -101,5 +125,33 @@ class StateStore:
                 if not hasattr(self._state, key):
                     raise AttributeError(f"Unknown state field: {key}")
                 setattr(self._state, key, value)
-            self._persist_locked()
+            self._trigger_flush()
             return self._snapshot(self._state)
+
+    async def update_atomic(
+        self, fn: Callable[[WeatherState], None]
+    ) -> WeatherState:
+        """Apply a synchronous mutator function under the store lock.
+
+        Guarantees read-modify-write atomicity and triggers a debounced flush.
+        """
+        async with self._lock:
+            fn(self._state)
+            self._trigger_flush()
+            return self._snapshot(self._state)
+
+    async def flush(self) -> None:
+        """Force an immediate disk write. Call on graceful shutdown."""
+        async with self._lock:
+            if self._dirty:
+                self._persist_locked()
+
+    async def close(self) -> None:
+        """Cancel pending flush and force write."""
+        if self._flush_task is not None and not self._flush_task.done():
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+        await self.flush()

@@ -24,16 +24,11 @@ from typing import Optional
 
 import aiohttp
 
+from ..models import DailyExtremes
+
 logger = logging.getLogger(__name__)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
-
-
-@dataclass
-class DailyExtremes:
-    date: date
-    temp_max_c: float
-    temp_min_c: Optional[float] = None
 
 
 class OpenMeteoService:
@@ -47,6 +42,7 @@ class OpenMeteoService:
         retries: int,
         forecast_days: int = 5,
         model: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> None:
         self._session = session
         self._lat = lat
@@ -56,6 +52,9 @@ class OpenMeteoService:
         self._retries = max(1, retries)
         self._forecast_days = max(1, min(forecast_days, 16))
         self._model = model
+        self._headers: dict[str, str] = {}
+        if user_agent:
+            self._headers["User-Agent"] = user_agent
 
     async def fetch_daily(self) -> Optional[list[DailyExtremes]]:
         params = {
@@ -72,7 +71,10 @@ class OpenMeteoService:
         for attempt in range(1, self._retries + 1):
             try:
                 async with self._session.get(
-                    OPEN_METEO_URL, params=params, timeout=self._timeout
+                    OPEN_METEO_URL,
+                    params=params,
+                    headers=self._headers,
+                    timeout=self._timeout,
                 ) as resp:
                     resp.raise_for_status()
                     data = await resp.json(content_type=None)

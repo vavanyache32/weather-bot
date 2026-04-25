@@ -1,26 +1,31 @@
 #!/bin/bash
 set -e
 
+APP_DIR="/opt/weatherapp"
+ENV_BACKUP="/tmp/weatherapp-env-backup"
+
 echo "[update] Stopping bot..."
-systemctl stop weatherbot
+systemctl stop weatherbot || true
 
-echo "[update] Backing up secrets..."
-cp /root/weatherapp/.env /tmp/weatherapp-env-backup 2>/dev/null || true
+echo "[update] Updating from git..."
+cd "$APP_DIR"
 
-echo "[update] Removing old app..."
-rm -rf /root/weatherapp
+# Backup local secrets before any destructive operations
+cp "$APP_DIR/.env" "$ENV_BACKUP" 2>/dev/null || true
 
-echo "[update] Unzipping new version..."
-unzip -o /root/weatherapp.zip -d /root/weatherapp
+# Remove generated artefacts
+rm -rf bot/__pycache__
 
-cd /root/weatherapp
+# Pull latest changes (or reset to origin/main if local drift exists)
+git fetch origin
+git reset --hard "origin/$(git rev-parse --abbrev-ref HEAD)"
 
-echo "[update] Restoring secrets..."
-cp /tmp/weatherapp-env-backup .env 2>/dev/null || true
+# Restore secrets
+cp "$ENV_BACKUP" "$APP_DIR/.env" 2>/dev/null || true
 
-echo "[update] Creating venv..."
-python3 -m venv .venv
-.venv/bin/pip install -q -r requirements.txt
+echo "[update] Installing dependencies..."
+source .venv/bin/activate
+pip install -q -r requirements.txt
 
 echo "[update] Starting bot..."
 systemctl start weatherbot

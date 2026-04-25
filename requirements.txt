@@ -1,8 +1,8 @@
 aiogram>=3.4.0,<4.0
 aiohttp>=3.9.0,<4.0
 aiohttp-socks>=0.9.0,<1.0
-python-dotenv>=1.0.0
+python-dotenv>=1.0.0,<2.0
 # OpenAI-compatible SDK — also works against Moonshot/Kimi, DeepSeek, etc.
-openai>=1.40.0
+openai>=1.40.0,<2.0
 # zoneinfo is stdlib on Python 3.9+; tzdata is only needed on Windows
 tzdata>=2024.1; sys_platform == "win32"

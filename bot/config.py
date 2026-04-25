@@ -7,8 +7,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
 
 class ConfigError(RuntimeError):
     """Raised when required configuration is missing or invalid."""
@@ -54,7 +52,7 @@ class Config:
     forecast_refresh_seconds: int = 3600
 
     # --- LLM (optional analysis) ---
-    llm_api_key: Optional[str] = None
+    llm_api_key: str | None = None
     # Moonshot/Kimi defaults; OpenAI-compatible endpoints work unchanged.
     llm_base_url: str = "https://api.moonshot.ai/v1"
     llm_model: str = "kimi-latest"
@@ -85,6 +83,7 @@ def _get_required(name: str) -> str:
 
 def load_config() -> Config:
     """Load config from the process environment (and .env file)."""
+    load_dotenv()
     token = _get_required("TELEGRAM_BOT_TOKEN").strip()
     chat_id_raw = _get_required("TELEGRAM_CHAT_ID").strip()
 
