@@ -998,7 +998,7 @@ def _format_detailed_forecast(state: WeatherState) -> str:
                     continue
                 seen.add(label)
                 model_parts.append(f"{label} {val:.1f}°C")
-                if len(model_parts) >= 6:
+                if len(model_parts) >= 10:
                     break
             if model_parts:
                 lines.append("   " + " | ".join(model_parts))
@@ -1080,7 +1080,7 @@ def format_day_aggregate_message(
                 continue
             seen.add(label)
             parts.append(f"{label} {val:.1f}°C")
-            if len(parts) >= 8:
+            if len(parts) >= 12:
                 break
         if parts:
             lines.append(f"🧩 Модели: {', '.join(parts)}")
