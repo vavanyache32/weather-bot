@@ -46,6 +46,15 @@ class WeatherState:
     # Newest first, bounded to ~30 days.
     verified_forecasts: list = None  # type: ignore[assignment]
 
+    # --- Multi-source observations (sliding window) ---
+    # List of Observation dicts.  Kept bounded by the scheduler.
+    observations: list = None  # type: ignore[assignment]
+    # Metadata about how the current daily_max_c was derived.
+    daily_max_source: Optional[str] = None
+    daily_max_confirmed_by: list = None  # type: ignore[assignment]
+    # --- Detailed forecast aggregates (consensus, band, spread) ---
+    forecast_aggregates: list = None  # type: ignore[assignment]
+
     def __post_init__(self) -> None:
         if self.forecast_days is None:
             self.forecast_days = []
@@ -53,6 +62,12 @@ class WeatherState:
             self.forecast_history = {}
         if self.verified_forecasts is None:
             self.verified_forecasts = []
+        if self.observations is None:
+            self.observations = []
+        if self.daily_max_confirmed_by is None:
+            self.daily_max_confirmed_by = []
+        if self.forecast_aggregates is None:
+            self.forecast_aggregates = []
 
 
 class StateStore:

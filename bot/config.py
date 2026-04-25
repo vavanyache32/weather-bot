@@ -61,6 +61,47 @@ class Config:
     # in LLMService so one failure is bounded.
     llm_timeout_seconds: int = 120
 
+    # --- OGIMET SYNOP (station 27611 = Vnukovo) ---
+    ogimet_enabled: bool = True
+    ogimet_station_id: str = "27611"
+    ogimet_interval_seconds: int = 600  # 10 min
+    ogimet_timeout_seconds: int = 15
+
+    # --- IEM ASOS (METAR + SPECI aggregator) ---
+    iem_enabled: bool = True
+    iem_station: str = "UUWW"
+    iem_network: str = "RU__ASOS"
+    iem_interval_seconds: int = 300  # 5 min
+    iem_timeout_seconds: int = 15
+
+    # --- WIS 2.0 MQTT (optional, disabled by default) ---
+    wis2_enabled: bool = False
+    wis2_broker: str = "mqtts://globalbroker.meteo.fr:8883"
+    wis2_topic: str = "origin/a/wis2/ru-roshydromet/data/core/weather/surface-based-observations/synop"
+    wis2_username: str = "everyone"
+    wis2_password: str = "everyone"
+    wis2_wigos_id: str = "0-20000-0-27611"
+
+    # --- SQLite DB ---
+    db_path: Path = Path("weather.db")
+
+    # --- Detailed forecast pipeline (new sources) ---
+    forecast_detailed_refresh_seconds: int = 3600  # 1 hour
+    forecast_models_enabled: bool = True
+    forecast_ensemble_enabled: bool = True
+    met_norway_enabled: bool = True
+    met_norway_interval_seconds: int = 1800  # 30 min
+    taf_enabled: bool = True
+    taf_interval_seconds: int = 1800  # 30 min
+    meteoinfo_enabled: bool = False
+    meteoinfo_interval_seconds: int = 10800  # 3 hours
+
+    # --- Alerts ---
+    alerts_enabled: bool = True
+    alerts_config_path: Path | None = Path("alerts.yaml")
+    webhook_url: str | None = None
+    email_enabled: bool = False
+
 
 # Strings that appear in .env.example and are obvious "you forgot to edit"
 # values. We bail out early with a human-readable message instead of making
@@ -135,6 +176,49 @@ def load_config() -> Config:
 
     telegram_proxy = (os.environ.get("TELEGRAM_PROXY") or "").strip() or None
 
+    # OGIMET
+    ogimet_enabled = os.environ.get("OGIMET_ENABLED", "true").lower() in ("1", "true", "yes")
+    ogimet_station_id = os.environ.get("OGIMET_STATION_ID", "27611").strip()
+    ogimet_interval = int(os.environ.get("OGIMET_INTERVAL_SECONDS", 600))
+    ogimet_timeout = int(os.environ.get("OGIMET_TIMEOUT_SECONDS", 15))
+
+    # IEM
+    iem_enabled = os.environ.get("IEM_ENABLED", "true").lower() in ("1", "true", "yes")
+    iem_station = os.environ.get("IEM_STATION", "UUWW").strip()
+    iem_network = os.environ.get("IEM_NETWORK", "RU__ASOS").strip()
+    iem_interval = int(os.environ.get("IEM_INTERVAL_SECONDS", 300))
+    iem_timeout = int(os.environ.get("IEM_TIMEOUT_SECONDS", 15))
+
+    # WIS 2.0
+    wis2_enabled = os.environ.get("WIS2_ENABLED", "false").lower() in ("1", "true", "yes")
+    wis2_broker = os.environ.get("WIS2_BROKER", "mqtts://globalbroker.meteo.fr:8883").strip()
+    wis2_topic = os.environ.get(
+        "WIS2_TOPIC",
+        "origin/a/wis2/ru-roshydromet/data/core/weather/surface-based-observations/synop",
+    ).strip()
+    wis2_username = os.environ.get("WIS2_USERNAME", "everyone").strip()
+    wis2_password = os.environ.get("WIS2_PASSWORD", "everyone").strip()
+    wis2_wigos_id = os.environ.get("WIS2_WIGOS_ID", "0-20000-0-27611").strip()
+
+    # DB & forecast pipeline
+    db_path = Path(os.environ.get("DB_PATH", "weather.db"))
+    forecast_detailed_refresh = int(os.environ.get("FORECAST_DETAILED_REFRESH_SECONDS", 3600))
+    forecast_models_enabled = os.environ.get("FORECAST_MODELS_ENABLED", "true").lower() in ("1", "true", "yes")
+    forecast_ensemble_enabled = os.environ.get("FORECAST_ENSEMBLE_ENABLED", "true").lower() in ("1", "true", "yes")
+    met_norway_enabled = os.environ.get("MET_NORWAY_ENABLED", "true").lower() in ("1", "true", "yes")
+    met_norway_interval = int(os.environ.get("MET_NORWAY_INTERVAL_SECONDS", 1800))
+    taf_enabled = os.environ.get("TAF_ENABLED", "true").lower() in ("1", "true", "yes")
+    taf_interval = int(os.environ.get("TAF_INTERVAL_SECONDS", 1800))
+    meteoinfo_enabled = os.environ.get("METEOINFO_ENABLED", "false").lower() in ("1", "true", "yes")
+    meteoinfo_interval = int(os.environ.get("METEOINFO_INTERVAL_SECONDS", 10800))
+
+    # Alerts
+    alerts_enabled = os.environ.get("ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+    alerts_config_path_raw = (os.environ.get("ALERTS_CONFIG_PATH") or "").strip()
+    alerts_config_path = Path(alerts_config_path_raw) if alerts_config_path_raw else None
+    webhook_url = (os.environ.get("WEBHOOK_URL") or "").strip() or None
+    email_enabled = os.environ.get("EMAIL_ENABLED", "false").lower() in ("1", "true", "yes")
+
     return Config(
         telegram_bot_token=token,
         telegram_chat_id=chat_id,
@@ -150,4 +234,33 @@ def load_config() -> Config:
         llm_base_url=llm_base_url,
         llm_model=llm_model,
         llm_timeout_seconds=llm_timeout,
+        ogimet_enabled=ogimet_enabled,
+        ogimet_station_id=ogimet_station_id,
+        ogimet_interval_seconds=ogimet_interval,
+        ogimet_timeout_seconds=ogimet_timeout,
+        iem_enabled=iem_enabled,
+        iem_station=iem_station,
+        iem_network=iem_network,
+        iem_interval_seconds=iem_interval,
+        iem_timeout_seconds=iem_timeout,
+        wis2_enabled=wis2_enabled,
+        wis2_broker=wis2_broker,
+        wis2_topic=wis2_topic,
+        wis2_username=wis2_username,
+        wis2_password=wis2_password,
+        wis2_wigos_id=wis2_wigos_id,
+        db_path=db_path,
+        forecast_detailed_refresh_seconds=forecast_detailed_refresh,
+        forecast_models_enabled=forecast_models_enabled,
+        forecast_ensemble_enabled=forecast_ensemble_enabled,
+        met_norway_enabled=met_norway_enabled,
+        met_norway_interval_seconds=met_norway_interval,
+        taf_enabled=taf_enabled,
+        taf_interval_seconds=taf_interval,
+        meteoinfo_enabled=meteoinfo_enabled,
+        meteoinfo_interval_seconds=meteoinfo_interval,
+        alerts_enabled=alerts_enabled,
+        alerts_config_path=alerts_config_path,
+        webhook_url=webhook_url,
+        email_enabled=email_enabled,
     )

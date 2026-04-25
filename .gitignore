@@ -25,3 +25,7 @@ Thumbs.db
 
 # State / local data
 state.json
+*.db
+*.db-shm
+*.db-wal
+smoke_output.txt

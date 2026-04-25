@@ -1,0 +1,18 @@
+{
+  "latitude": 55.5914,
+  "longitude": 37.2615,
+  "generationtime_ms": 12.34,
+  "utc_offset_seconds": 0,
+  "timezone": "UTC",
+  "timezone_abbreviation": "UTC",
+  "elevation": 209.0,
+  "daily": {
+    "time": ["2026-04-25", "2026-04-26"],
+    "temperature_2m_max_ecmwf_ifs025": [15.2, 16.3],
+    "temperature_2m_max_gfs_seamless": [14.8, 15.9]
+  },
+  "daily_units": {
+    "temperature_2m_max_ecmwf_ifs025": "°C",
+    "temperature_2m_max_gfs_seamless": "°C"
+  }
+}

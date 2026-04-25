@@ -13,6 +13,16 @@ Vnukovo airport (ICAO: UUWW)** and pushes updates every 30 minutes.
   latest).
 * **Secondary source** — Yandex.Weather `api.weather.yandex.ru/v2/forecast`
   for Moscow coordinates, shown alongside NOAA for comparison.
+* **New observation sources** (added to close coverage gaps and obtain
+  explicit daily Tmax from meteorological reports):
+  * **OGIMET SYNOP** — station `27611` (Vnukovo). Fetched every 10 min.
+    Provides explicit daily max/min via section 333 of SYNOP bulletins.
+  * **IEM ASOS** — `mesonet.agron.iastate.edu` aggregator for `UUWW`.
+    Fetched every 5 min. Provides `max_dayairtemp` (explicit daily max)
+    alongside current METAR temperature.
+  * **WIS 2.0 MQTT** (optional, disabled by default) — skeleton prepared
+    for future push ingestion of BUFR data from the WMO Global Broker.
+    Requires `paho-mqtt` + `eccodes` to complete.
 
 [pm]: https://polymarket.com/
 
@@ -190,6 +200,23 @@ everything else works.
 * State is persisted to `state.json` atomically (write to `.tmp` +
   `rename`) so restarts keep today's max and avoid duplicate messages.
 * If a source returns `null`, it is skipped (no spam, no crash).
+
+### New observation sources
+
+| Source | Cadence | Explicit Tmax | Notes |
+|---|---|---|---|
+| NOAA METAR (AWC) | every 1 min | no | Point-in-time METAR temp; bot tracks running max. |
+| Yandex.Weather | every 10 min | no | Current temp + hourly forecast. |
+| **OGIMET SYNOP** | every 10 min | **yes** | Station `27611`; parsed via `synop2bufr`. |
+| **IEM ASOS** | every 5 min | **yes** | Aggregates METAR+SPECI; exposes `max_dayairtemp`. |
+| WIS 2.0 MQTT | push (real-time) | **yes** | Skeleton only — requires `paho-mqtt` + `eccodes`. |
+
+The scheduler deduplicates by `(source, station, observed_at)` and computes
+the daily maximum with the following priority:
+
+1. **Explicit max** (`max_temperature_c`) from OGIMET or IEM — authoritative.
+2. If no explicit max is available, the highest point observation
+   (`air_temperature_c`) across all sources is used.
 
 ### Why this tracks *max*, not latest
 

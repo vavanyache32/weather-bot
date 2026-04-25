@@ -1,0 +1,13 @@
+{
+  "features": [
+    {
+      "properties": {
+        "id": "UUWW",
+        "site": "Moscow",
+        "prior": 1,
+        "obsTime": "2026-04-25T12:00:00Z",
+        "rawOb": "TAF UUWW 251200Z 2512/2612 24004MPS 9999 SCT030 TX17/2514Z TN08/2504Z BECMG 2520/2522 30005MPS"
+      }
+    }
+  ]
+}

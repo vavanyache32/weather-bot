@@ -16,14 +16,23 @@ import aiohttp
 from aiogram import Bot, Dispatcher
 
 from .config import ConfigError, load_config
+from .db import init_db
 from .handlers import build_router
 from .proxy_session import ProxyAiohttpSession
 from .logging_config import setup_logging
 from .scheduler import WeatherScheduler
 from .services.forecast import ForecastService
+from .services.forecast_aggregator import ForecastAggregator
+from .services.iem import IEMASOSService
 from .services.llm import LLMService
+from .services.met_norway import MetNorwayService
 from .services.noaa import NOAAService
+from .services.ogimet import OgimetService
 from .services.openmeteo import OpenMeteoService
+from .services.openmeteo_ensemble import OpenMeteoEnsembleService
+from .services.openmeteo_models import OpenMeteoModelsService
+from .services.taf import TAFService
+from .services.wis2 import WIS2Service
 from .services.yandex import YandexService
 from .storage import StateStore
 
@@ -44,6 +53,7 @@ async def _amain() -> None:
     dp = Dispatcher()
 
     store = StateStore(config.state_file)
+    db = await init_db(config.db_path)
 
     connector = aiohttp.TCPConnector(limit=10)
     async with aiohttp.ClientSession(connector=connector) as session:
@@ -80,6 +90,83 @@ async def _amain() -> None:
             model=config.llm_model,
             timeout_seconds=config.llm_timeout_seconds,
         )
+        ogimet = (
+            OgimetService(
+                session=session,
+                station_id=config.ogimet_station_id,
+                timeout_seconds=config.ogimet_timeout_seconds,
+                retries=config.http_retries,
+                interval_seconds=config.ogimet_interval_seconds,
+            )
+            if config.ogimet_enabled
+            else None
+        )
+        iem = (
+            IEMASOSService(
+                session=session,
+                station=config.iem_station,
+                network=config.iem_network,
+                timeout_seconds=config.iem_timeout_seconds,
+                retries=config.http_retries,
+            )
+            if config.iem_enabled
+            else None
+        )
+        wis2 = WIS2Service(
+            broker=config.wis2_broker,
+            topic=config.wis2_topic,
+            username=config.wis2_username,
+            password=config.wis2_password,
+            wigos_id=config.wis2_wigos_id,
+            enabled=config.wis2_enabled,
+        )
+        # Detailed forecast providers
+        forecast_providers = []
+        if config.forecast_models_enabled:
+            forecast_providers.append(
+                OpenMeteoModelsService(
+                    session=session,
+                    lat=config.moscow_lat,
+                    lon=config.moscow_lon,
+                    forecast_days=config.forecast_days,
+                    timeout_seconds=config.http_timeout_seconds,
+                    retries=config.http_retries,
+                )
+            )
+        if config.forecast_ensemble_enabled:
+            forecast_providers.append(
+                OpenMeteoEnsembleService(
+                    session=session,
+                    lat=config.moscow_lat,
+                    lon=config.moscow_lon,
+                    forecast_days=config.forecast_days,
+                    timeout_seconds=config.http_timeout_seconds,
+                    retries=config.http_retries,
+                )
+            )
+        if config.met_norway_enabled:
+            forecast_providers.append(
+                MetNorwayService(
+                    session=session,
+                    lat=config.moscow_lat,
+                    lon=config.moscow_lon,
+                    user_agent=config.http_user_agent,
+                    timeout_seconds=config.http_timeout_seconds,
+                    retries=config.http_retries,
+                )
+            )
+        if config.taf_enabled:
+            forecast_providers.append(
+                TAFService(
+                    session=session,
+                    station=config.noaa_station,
+                    timeout_seconds=config.http_timeout_seconds,
+                    retries=config.http_retries,
+                )
+            )
+
+        aggregator = ForecastAggregator(db)
+
         scheduler = WeatherScheduler(
             config=config,
             bot=bot,
@@ -88,6 +175,12 @@ async def _amain() -> None:
             yandex=yandex,
             forecast=forecast,
             llm=llm,
+            db=db,
+            ogimet=ogimet,
+            iem=iem,
+            wis2=wis2,
+            forecast_providers=forecast_providers,
+            aggregator=aggregator,
         )
 
         dp.include_router(build_router(store, scheduler))
@@ -100,6 +193,9 @@ async def _amain() -> None:
         )
 
         scheduler_task = asyncio.create_task(scheduler.run(), name="scheduler")
+        wis2_task = None
+        if wis2.enabled:
+            wis2_task = asyncio.create_task(wis2.start(), name="wis2")
         try:
             # handle_signals=True breaks pythonw.exe on Windows; on Linux we
             # need it so aiogram catches SIGTERM from systemd gracefully.
@@ -110,6 +206,14 @@ async def _amain() -> None:
                 await scheduler_task
             except asyncio.CancelledError:
                 pass
+            if wis2_task is not None:
+                wis2_task.cancel()
+                try:
+                    await wis2_task
+                except asyncio.CancelledError:
+                    pass
+                await wis2.stop()
+            await db.close()
             await store.close()
             await bot.session.close()
 

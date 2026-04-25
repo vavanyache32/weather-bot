@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -33,9 +33,23 @@ def _round_half_up(value: float) -> int:
 from aiogram.exceptions import TelegramAPIError
 
 from .config import Config
+from .models import (
+    DailyForecastAggregate,
+    DailyMaxAggregate,
+    ForecastPoint,
+    Observation,
+)
 from .services.forecast import DailyMaxForecast, ForecastBundle, ForecastService
+from .services.forecast_aggregator import ForecastAggregator
+from .services.iem import IEMASOSService
 from .services.llm import LLMService
+from .services.met_norway import MetNorwayService
 from .services.noaa import NOAAService
+from .services.ogimet import OgimetService
+from .services.openmeteo_ensemble import OpenMeteoEnsembleService
+from .services.openmeteo_models import OpenMeteoModelsService
+from .services.taf import TAFService
+from .services.wis2 import WIS2Service
 from .services.yandex import YandexReading, YandexService, predict_temperature_c
 from .storage import StateStore, WeatherState
 
@@ -71,6 +85,12 @@ class WeatherScheduler:
         yandex: YandexService,
         forecast: ForecastService,
         llm: LLMService,
+        db: "aiosqlite.Connection",
+        ogimet: Optional[OgimetService] = None,
+        iem: Optional[IEMASOSService] = None,
+        wis2: Optional[WIS2Service] = None,
+        forecast_providers: Optional[list] = None,
+        aggregator: Optional[ForecastAggregator] = None,
     ) -> None:
         self._config = config
         self._bot = bot
@@ -79,13 +99,112 @@ class WeatherScheduler:
         self._yandex = yandex
         self._forecast = forecast
         self._llm = llm
+        self._db = db
+        self._ogimet = ogimet
+        self._iem = iem
+        self._wis2 = wis2
+        self._forecast_providers = forecast_providers or []
+        self._aggregator = aggregator
         self._tz = ZoneInfo(config.timezone)
         self._last_forecast_refresh: Optional[datetime] = None
         self._last_yandex_reading: Optional[YandexReading] = None
         self._last_yandex_fetch: Optional[datetime] = None
+        self._last_ogimet_fetch: Optional[datetime] = None
+        self._last_iem_fetch: Optional[datetime] = None
+        self._last_detailed_refresh: Optional[datetime] = None
+        self._observations: list[Observation] = []
+
+    def _load_observations_from_state(self, state: WeatherState) -> None:
+        """Hydrate in-memory observation window from persisted state."""
+        raw_list = state.observations or []
+        loaded: list[Observation] = []
+        for item in raw_list:
+            if not isinstance(item, dict):
+                continue
+            try:
+                observed_at = datetime.fromisoformat(item["observed_at"])
+                loaded.append(
+                    Observation(
+                        source=item.get("source", ""),
+                        station=item.get("station", ""),
+                        observed_at=observed_at,
+                        air_temperature_c=item.get("air_temperature_c"),
+                        max_temperature_c=item.get("max_temperature_c"),
+                        raw=item.get("raw", ""),
+                    )
+                )
+            except (KeyError, ValueError, TypeError):
+                continue
+        self._observations = loaded
 
     def today_iso(self) -> str:
         return datetime.now(self._tz).date().isoformat()
+
+    def _dedup_and_merge(self, incoming: list[Observation]) -> None:
+        """Add new observations, dropping exact duplicates by key."""
+        existing = {o.dedup_key() for o in self._observations}
+        for obs in incoming:
+            if obs.dedup_key() not in existing:
+                self._observations.append(obs)
+                existing.add(obs.dedup_key())
+
+    def _trim_observations(self, max_age: timedelta = timedelta(hours=24), max_count: int = 200) -> None:
+        """Keep observations bounded by age and count."""
+        cutoff = datetime.now(timezone.utc) - max_age
+        self._observations = [o for o in self._observations if o.observed_at >= cutoff]
+        if len(self._observations) > max_count:
+            self._observations = self._observations[-max_count:]
+
+    def _compute_daily_max(self, today_iso: str) -> DailyMaxAggregate:
+        """Aggregate today's observations.
+
+        Priority:
+        1. Explicit max_temperature_c from any source (SYNOP, IEM).
+        2. If none available, max of air_temperature_c across all sources.
+        """
+        today_date = datetime.strptime(today_iso, "%Y-%m-%d").date()
+        day_start = datetime(today_date.year, today_date.month, today_date.day, tzinfo=self._tz)
+        day_end = day_start + timedelta(days=1)
+
+        today_obs = [
+            o for o in self._observations
+            if day_start <= o.observed_at.astimezone(self._tz) < day_end
+        ]
+
+        if not today_obs:
+            return DailyMaxAggregate()
+
+        # Explicit max track
+        explicit_obs = [o for o in today_obs if o.max_temperature_c is not None]
+        if explicit_obs:
+            best = max(explicit_obs, key=lambda o: _round_half_up(o.max_temperature_c))  # type: ignore[arg-type]
+            value = _round_half_up(best.max_temperature_c)  # type: ignore[arg-type]
+            confirmed = [
+                o.source for o in explicit_obs
+                if _round_half_up(o.max_temperature_c) == value  # type: ignore[arg-type]
+            ]
+            return DailyMaxAggregate(
+                value_c=value,
+                source=f"{best.source} (explicit)",
+                confirmed_by=list(dict.fromkeys(confirmed)),
+            )
+
+        # Point max track
+        point_obs = [o for o in today_obs if o.air_temperature_c is not None]
+        if point_obs:
+            best = max(point_obs, key=lambda o: _round_half_up(o.air_temperature_c))  # type: ignore[arg-type]
+            value = _round_half_up(best.air_temperature_c)  # type: ignore[arg-type]
+            confirmed = [
+                o.source for o in point_obs
+                if _round_half_up(o.air_temperature_c) == value  # type: ignore[arg-type]
+            ]
+            return DailyMaxAggregate(
+                value_c=value,
+                source="point_max",
+                confirmed_by=list(dict.fromkeys(confirmed)),
+            )
+
+        return DailyMaxAggregate()
 
     async def run(self) -> None:
         """Main loop. Catches per-tick errors so one bad poll can't kill the bot."""
@@ -162,11 +281,83 @@ class WeatherScheduler:
             state.daily_max_c = None
             state.daily_max_date = today_iso
 
-        # Update running max from NOAA (the Polymarket source of truth).
+        # --- Multi-source observation aggregation ---
+        if not self._observations and state.observations:
+            self._load_observations_from_state(state)
+
+        new_obs: list[Observation] = []
+
+        # OGIMET (throttled)
+        if self._ogimet and self._config.ogimet_enabled:
+            if (
+                self._last_ogimet_fetch is None
+                or (now_local - self._last_ogimet_fetch).total_seconds()
+                >= self._config.ogimet_interval_seconds
+            ):
+                try:
+                    ogimet_obs = await self._ogimet.fetch_observations()
+                    new_obs.extend(ogimet_obs)
+                    self._last_ogimet_fetch = now_local
+                except Exception:
+                    logger.exception("OGIMET fetch failed")
+
+        # IEM (throttled)
+        if self._iem and self._config.iem_enabled:
+            if (
+                self._last_iem_fetch is None
+                or (now_local - self._last_iem_fetch).total_seconds()
+                >= self._config.iem_interval_seconds
+            ):
+                try:
+                    iem_obs = await self._iem.fetch_current()
+                    if iem_obs is not None:
+                        new_obs.append(iem_obs)
+                    self._last_iem_fetch = now_local
+                except Exception:
+                    logger.exception("IEM fetch failed")
+
+        # WIS2 (push)
+        if self._wis2 and self._wis2.enabled:
+            try:
+                wis2_obs = self._wis2.get_recent_observations()
+                if wis2_obs:
+                    new_obs.extend(wis2_obs)
+            except Exception:
+                logger.exception("WIS2 observation retrieval failed")
+
+        # Synthetic observations for legacy sources so they participate in aggregation
+        if noaa_raw is not None:
+            new_obs.append(
+                Observation(
+                    source="noaa_metar",
+                    station=self._config.noaa_station,
+                    observed_at=datetime.now(timezone.utc),
+                    air_temperature_c=float(noaa_raw),
+                    raw="",
+                )
+            )
+        if yandex_raw is not None:
+            new_obs.append(
+                Observation(
+                    source="yandex",
+                    station="UUWW",
+                    observed_at=datetime.now(timezone.utc),
+                    air_temperature_c=float(yandex_raw),
+                    raw="",
+                )
+            )
+
+        self._dedup_and_merge(new_obs)
+        self._trim_observations()
+
+        # Compute daily max with explicit-max priority
+        daily_max_agg = self._compute_daily_max(today_iso)
+        new_daily_max = daily_max_agg.value_c
+
         new_max = False
-        if noaa_temp is not None:
-            if state.daily_max_c is None or noaa_temp > state.daily_max_c:
-                state.daily_max_c = noaa_temp
+        if new_daily_max is not None:
+            if state.daily_max_c is None or new_daily_max > state.daily_max_c:
+                state.daily_max_c = new_daily_max
                 new_max = True
 
         # Notify only when something actually changed so the user isn't
@@ -209,6 +400,19 @@ class WeatherScheduler:
             notified_noaa_down=(
                 False if noaa_temp is not None else notified_noaa_down
             ),
+            observations=[
+                {
+                    "source": o.source,
+                    "station": o.station,
+                    "observed_at": o.observed_at.isoformat(),
+                    "air_temperature_c": o.air_temperature_c,
+                    "max_temperature_c": o.max_temperature_c,
+                    "raw": o.raw,
+                }
+                for o in self._observations
+            ],
+            daily_max_source=daily_max_agg.source,
+            daily_max_confirmed_by=daily_max_agg.confirmed_by,
         )
 
         # Refresh the daily-max ensemble forecast + optional LLM analysis
@@ -219,6 +423,10 @@ class WeatherScheduler:
             predicted_30min=predicted_temp,
             force=False,
         )
+        try:
+            await self.refresh_forecast_detailed(force=False)
+        except Exception:
+            logger.exception("Detailed forecast refresh failed")
 
         notified = False
         if noaa_temp is None and yandex_temp is None:
@@ -233,6 +441,8 @@ class WeatherScheduler:
                 predicted_30min_c=predicted_temp,
                 new_max=new_max,
                 now_local=now_local,
+                daily_max_source=daily_max_agg.source,
+                daily_max_confirmed_by=daily_max_agg.confirmed_by,
             )
             try:
                 await self._bot.send_message(
@@ -364,6 +574,100 @@ class WeatherScheduler:
         )
         return True
 
+    async def refresh_forecast_detailed(self, force: bool = False) -> bool:
+        """Fetch from all forecast providers, store in SQLite, recompute aggregates.
+
+        Cadence is controlled by ``forecast_detailed_refresh_seconds``.
+        """
+        now_local = datetime.now(self._tz)
+        interval = self._config.forecast_detailed_refresh_seconds
+        if (
+            not force
+            and self._last_detailed_refresh is not None
+            and (now_local - self._last_detailed_refresh).total_seconds() < interval
+        ):
+            return False
+
+        if not self._forecast_providers:
+            return False
+
+        # Fetch from all providers in parallel
+        tasks = [asyncio.create_task(p.fetch()) for p in self._forecast_providers]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        total_inserted = 0
+        for result in results:
+            if isinstance(result, Exception):
+                logger.warning("Forecast provider failed: %s", result)
+                continue
+            points: list[ForecastPoint] = result
+            for pt in points:
+                try:
+                    await self._db.execute(
+                        """
+                        INSERT OR IGNORE INTO forecasts
+                        (source, model, member, station, lat, lon, issued_at, valid_at,
+                         lead_time_h, air_temperature_c, daily_tmax_c, daily_tmin_c,
+                         quantile, raw)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            pt.source,
+                            pt.model,
+                            pt.member,
+                            pt.station,
+                            pt.lat,
+                            pt.lon,
+                            pt.issued_at.isoformat(),
+                            pt.valid_at.isoformat(),
+                            pt.lead_time_h,
+                            pt.air_temperature_c,
+                            pt.daily_tmax_c,
+                            pt.daily_tmin_c,
+                            pt.quantile,
+                            pt.raw,
+                        ),
+                    )
+                    total_inserted += 1
+                except Exception as exc:
+                    logger.warning("Failed to insert forecast point: %s", exc)
+        await self._db.commit()
+
+        # Recompute aggregates for today + next days
+        aggregate_dicts: list[dict] = []
+        if self._aggregator:
+            from datetime import date as _date
+            today = now_local.date()
+            aggregates = await self._aggregator.compute_range(
+                "UUWW",
+                today,
+                today + timedelta(days=self._config.forecast_days),
+            )
+            logger.info(
+                "Forecast aggregates recomputed: %d days", len(aggregates)
+            )
+            for agg in aggregates:
+                aggregate_dicts.append(
+                    {
+                        "station": agg.station,
+                        "valid_date": agg.valid_date.isoformat(),
+                        "consensus_c": agg.consensus_c,
+                        "band_low_c": agg.band_low_c,
+                        "band_high_c": agg.band_high_c,
+                        "model_spread_c": agg.model_spread_c,
+                        "mixed_forecast_c": agg.mixed_forecast_c,
+                        "models": agg.models,
+                        "sources_used": agg.sources_used,
+                    }
+                )
+            await self._store.update(forecast_aggregates=aggregate_dicts)
+
+        self._last_detailed_refresh = now_local
+        logger.info(
+            "Detailed forecast refresh: %d points inserted", total_inserted
+        )
+        return True
+
     async def analyze_day(self, date_iso: str) -> Optional[str]:
         """Run LLM analysis for a single forecast day. Returns text or None."""
         logger.info("Analyzing day %s (llm enabled=%s)", date_iso, self._llm.enabled)
@@ -445,6 +749,8 @@ def format_update_message(
     predicted_30min_c: Optional[int],
     new_max: bool,
     now_local: Optional[datetime] = None,
+    daily_max_source: Optional[str] = None,
+    daily_max_confirmed_by: Optional[list[str]] = None,
 ) -> str:
     lines: list[str] = []
     if now_local is not None:
@@ -455,11 +761,15 @@ def format_update_message(
         if noaa_temp is not None
         else "🌡 NOAA (Vnukovo): n/a"
     )
-    lines.append(
-        f"📈 Max today: {daily_max_c}°C"
-        if daily_max_c is not None
-        else "📈 Max today: n/a"
-    )
+    if daily_max_c is not None:
+        max_line = f"📈 Max today: {daily_max_c}°C"
+        if daily_max_source:
+            max_line += f" ({daily_max_source})"
+        if daily_max_confirmed_by:
+            max_line += f", confirmed: {', '.join(daily_max_confirmed_by)}"
+        lines.append(max_line)
+    else:
+        lines.append("📈 Max today: n/a")
     lines.append(
         f"🟡 Yandex: {yandex_temp}°C"
         if yandex_temp is not None
@@ -499,6 +809,10 @@ def _deserialize_day(raw: dict) -> Optional[DailyMaxForecast]:
 
 def format_forecast_message(state: WeatherState) -> str:
     """Render the stored ensemble forecast + analysis for /forecast."""
+    if state.forecast_aggregates:
+        return _format_detailed_forecast(state)
+
+    # Legacy fallback
     if not state.forecast_days:
         return (
             "Прогноз ещё не собран — подождите одного тика "
@@ -566,6 +880,42 @@ def format_forecast_message(state: WeatherState) -> str:
         lines.append("")
         lines.append(f"<i>Обновлено: {state.forecast_fetched_at_iso}</i>")
     return "\n".join(lines)
+
+
+def _format_detailed_forecast(state: WeatherState) -> str:
+    """Render forecast using the new aggregate structure."""
+    lines: list[str] = []
+    for agg_raw in state.forecast_aggregates or []:
+        date_str = agg_raw.get("valid_date", "?")
+        consensus = agg_raw.get("consensus_c")
+        band_low = agg_raw.get("band_low_c")
+        band_high = agg_raw.get("band_high_c")
+        spread = agg_raw.get("model_spread_c")
+        models = agg_raw.get("models", [])
+
+        if consensus is None:
+            continue
+
+        line = f"📅 <b>{date_str}</b>  consensus <b>{consensus:.1f}°C</b>"
+        if band_low is not None and band_high is not None:
+            line += f"  (P10..P90 {band_low:.1f}..{band_high:.1f}°C)"
+        if spread is not None:
+            line += f"  spread {spread:.1f}°C"
+        lines.append(line)
+
+        if models:
+            model_parts = []
+            for source, model, val in models[:6]:
+                label = model or source
+                model_parts.append(f"{label} {val:.1f}°C")
+            lines.append("   " + " | ".join(model_parts))
+
+    if state.daily_max_c is not None:
+        lines.append(f"📈 Фактический макс сегодня: {state.daily_max_c}°C")
+
+    if state.forecast_fetched_at_iso:
+        lines.append(f"<i>Обновлено: {state.forecast_fetched_at_iso}</i>")
+    return "\n".join(lines) if lines else "Прогноз ещё не собран."
 
 
 def format_day_analysis_message(
@@ -701,13 +1051,21 @@ def format_status_message(state: WeatherState) -> str:
         f"🌡 NOAA (Vnukovo): {state.last_noaa_temp_c}°C"
         if state.last_noaa_temp_c is not None
         else "🌡 NOAA (Vnukovo): n/a",
-        f"📈 Max today: {state.daily_max_c}°C"
-        if state.daily_max_c is not None
-        else "📈 Max today: n/a",
+    ]
+    if state.daily_max_c is not None:
+        max_line = f"📈 Max today: {state.daily_max_c}°C"
+        if state.daily_max_source:
+            max_line += f" ({state.daily_max_source})"
+        if state.daily_max_confirmed_by:
+            max_line += f", confirmed: {', '.join(state.daily_max_confirmed_by)}"
+        lines.append(max_line)
+    else:
+        lines.append("📈 Max today: n/a")
+    lines.append(
         f"🟡 Yandex: {state.last_yandex_temp_c}°C"
         if state.last_yandex_temp_c is not None
         else "🟡 Yandex: n/a",
-    ]
+    )
     if state.predicted_30min_c is not None:
         lines.append(
             f"🔮 Через 30 мин: {state.predicted_30min_c}°C (Yandex)"

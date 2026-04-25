@@ -52,8 +52,8 @@ WELCOME_TEXT = (
 
 ABOUT_TEXT = (
     "ℹ️ <b>О боте</b>\n\n"
-    "• Наблюдения: NOAA / NWS Aviation Weather Center (METAR UUWW).\n"
-    "• Прогноз-ансамбль: Open-Meteo (seamless NWP) + Yandex daily max.\n"
+    "• Наблюдения: NOAA / NWS Aviation Weather Center (METAR UUWW), OGIMET SYNOP, IEM ASOS.\n"
+    "• Прогноз-ансамбль: Open-Meteo (7 NWP models + ensemble), MET Norway, TAF.\n"
     "• Логика наблюдений соответствует Polymarket: максимум за локальные "
     "сутки (Москва) в целых °C.\n"
     "• LLM (если настроен) только комментирует реальные числа — сам "
@@ -156,6 +156,10 @@ def build_router(store: StateStore, scheduler: WeatherScheduler) -> Router:
     async def cb_forecast_refresh(callback: CallbackQuery) -> None:
         await callback.answer("Обновляю...")
         await scheduler.refresh_forecast(force=True)
+        try:
+            await scheduler.refresh_forecast_detailed(force=True)
+        except Exception:
+            logger.exception("Detailed forecast refresh failed")
         state = await store.get()
         await _safe_edit(
             callback, format_forecast_message(state), forecast_kb(), parse_mode="HTML"
