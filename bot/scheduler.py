@@ -616,6 +616,13 @@ class WeatherScheduler:
         tasks = [asyncio.create_task(p.fetch()) for p in self._forecast_providers]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        # Also fetch legacy bundle (Open-Meteo + Yandex) and inject as synthetic points
+        try:
+            bundle = await self._forecast.fetch(days=self._config.forecast_days)
+        except Exception:
+            logger.exception("Legacy forecast fetch failed")
+            bundle = None
+
         total_inserted = 0
         for result in results:
             if isinstance(result, Exception):
@@ -652,6 +659,64 @@ class WeatherScheduler:
                     total_inserted += 1
                 except Exception as exc:
                     logger.warning("Failed to insert forecast point: %s", exc)
+
+        # Inject legacy Yandex / old Open-Meteo as synthetic points so they
+        # participate in consensus / spread calculations.
+        if bundle:
+            issued_at = datetime.now(timezone.utc)
+            for day in bundle.days:
+                base_valid = datetime(
+                    day.date.year, day.date.month, day.date.day, 12, tzinfo=timezone.utc
+                )
+                if day.open_meteo_c is not None:
+                    try:
+                        await self._db.execute(
+                            """
+                            INSERT OR IGNORE INTO forecasts
+                            (source, model, station, lat, lon, issued_at, valid_at,
+                             lead_time_h, daily_tmax_c)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                "open_meteo_legacy",
+                                "Open-Meteo",
+                                "UUWW",
+                                55.5914,
+                                37.2615,
+                                issued_at.isoformat(),
+                                base_valid.isoformat(),
+                                0,
+                                float(day.open_meteo_c),
+                            ),
+                        )
+                        total_inserted += 1
+                    except Exception as exc:
+                        logger.warning("Legacy OM insert failed: %s", exc)
+                if day.yandex_c is not None:
+                    try:
+                        await self._db.execute(
+                            """
+                            INSERT OR IGNORE INTO forecasts
+                            (source, model, station, lat, lon, issued_at, valid_at,
+                             lead_time_h, daily_tmax_c)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                "yandex",
+                                "Yandex",
+                                "UUWW",
+                                55.5914,
+                                37.2615,
+                                issued_at.isoformat(),
+                                base_valid.isoformat(),
+                                0,
+                                float(day.yandex_c),
+                            ),
+                        )
+                        total_inserted += 1
+                    except Exception as exc:
+                        logger.warning("Legacy Yandex insert failed: %s", exc)
+
         await self._db.commit()
 
         # Recompute aggregates for today + next days
@@ -681,30 +746,6 @@ class WeatherScheduler:
                         "sources_used": list(agg.sources_used),
                     }
                 )
-
-            # Enrich with legacy Yandex / old Open-Meteo so the user still sees them
-            state_now = await self._store.get()
-            for d in state_now.forecast_days or []:
-                date_iso = d.get("date")
-                if not date_iso:
-                    continue
-                for ad in aggregate_dicts:
-                    if ad["valid_date"] != date_iso:
-                        continue
-                    om = d.get("open_meteo_c")
-                    yx = d.get("yandex_c")
-                    if om is not None:
-                        ad["models"].append(("open_meteo", "Open-Meteo", float(om)))
-                    if yx is not None:
-                        ad["models"].append(("yandex", "Yandex", float(yx)))
-                    # Recompute consensus & spread with legacy sources included
-                    vals = [v for _, _, v in ad["models"]]
-                    if vals:
-                        from statistics import median
-                        ad["consensus_c"] = median(vals)
-                        ad["model_spread_c"] = max(vals) - min(vals)
-                    break
-
             await self._store.update(forecast_aggregates=aggregate_dicts)
 
         self._last_detailed_refresh = now_local
