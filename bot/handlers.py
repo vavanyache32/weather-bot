@@ -29,6 +29,7 @@ from .keyboards import (
 )
 from .scheduler import (
     WeatherScheduler,
+    format_day_aggregate_message,
     format_day_analysis_message,
     format_forecast_message,
     format_status_message,
@@ -169,6 +170,19 @@ def build_router(store: StateStore, scheduler: WeatherScheduler) -> Router:
     async def cb_forecast_day(callback: CallbackQuery) -> None:
         date_iso = callback.data.split(":", 2)[2]
         await callback.answer("Анализирую...")
+        state = await store.get()
+
+        # Prefer new aggregate data if available
+        agg_raw = next(
+            (a for a in state.forecast_aggregates or [] if a.get("valid_date") == date_iso),
+            None,
+        )
+        if agg_raw is not None:
+            text = format_day_aggregate_message(agg_raw, state.analysis_text)
+            await _safe_edit(callback, text, forecast_day_kb(), parse_mode="HTML")
+            return
+
+        # Legacy fallback
         analysis = await scheduler.analyze_day(date_iso)
         state = await store.get()
         day_raw = next(

@@ -921,7 +921,10 @@ def _format_detailed_forecast(state: WeatherState) -> str:
 def format_day_analysis_message(
     day: DailyMaxForecast, analysis_text: Optional[str]
 ) -> str:
-    """Render a single-day forecast + LLM analysis for Telegram."""
+    """Render a single-day forecast + LLM analysis for Telegram.
+
+    Legacy fallback for old forecast_days structure.
+    """
     lines: list[str] = []
     lines.append(f"📅 <b>Прогноз на {day.date.isoformat()}</b>")
 
@@ -944,6 +947,55 @@ def format_day_analysis_message(
             lines.append(f"🟡 Уверенность средняя (спред {day.spread_c}°C)")
         else:
             lines.append(f"🔴 Уверенность низкая (спред {day.spread_c}°C)")
+
+    if analysis_text:
+        lines.append("")
+        lines.append("🧠 <b>Анализ ИИ:</b>")
+        lines.append(analysis_text)
+    else:
+        lines.append("")
+        lines.append("🧠 <b>Анализ ИИ:</b> недоступен (LLM не настроен или ошибка)")
+
+    return "\n".join(lines)
+
+
+def format_day_aggregate_message(
+    agg: dict, analysis_text: Optional[str]
+) -> str:
+    """Render a single-day forecast from the new aggregate structure."""
+    date_str = agg.get("valid_date", "?")
+    consensus = agg.get("consensus_c")
+    band_low = agg.get("band_low_c")
+    band_high = agg.get("band_high_c")
+    spread = agg.get("model_spread_c")
+    models = agg.get("models", [])
+
+    lines: list[str] = []
+    lines.append(f"📅 <b>Прогноз на {date_str}</b>")
+
+    if consensus is not None:
+        lines.append(f"🎯 Consensus: <b>{consensus:.1f}°C</b>")
+    if band_low is not None and band_high is not None:
+        lines.append(f"📊 Диапазон P10..P90: <b>{band_low:.1f}..{band_high:.1f}°C</b>")
+
+    if models:
+        parts: list[str] = []
+        for source, model, val in models[:8]:
+            label = model or source
+            parts.append(f"{label} {val:.1f}°C")
+        lines.append(f"🧩 Модели: {', '.join(parts)}")
+    else:
+        lines.append("🧩 Модели: нет данных")
+
+    if spread is not None:
+        if spread == 0:
+            lines.append("🟢 Модели полностью согласны")
+        elif spread <= 2:
+            lines.append(f"🟢 Уверенность высокая (спред {spread:.1f}°C)")
+        elif spread <= 4:
+            lines.append(f"🟡 Уверенность средняя (спред {spread:.1f}°C)")
+        else:
+            lines.append(f"🔴 Уверенность низкая (спред {spread:.1f}°C)")
 
     if analysis_text:
         lines.append("")
