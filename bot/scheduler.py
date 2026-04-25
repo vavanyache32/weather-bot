@@ -406,8 +406,10 @@ class WeatherScheduler:
 
         if new_max:
             should_notify = True
+        elif is_new_metar:
+            should_notify = True
         elif noaa_temp is not None and noaa_temp != state.last_noaa_temp_c:
-            if is_new_metar or cooldown_ok:
+            if cooldown_ok:
                 should_notify = True
         elif noaa_temp is None and yandex_temp is not None:
             # NOAA is down but Yandex is up — notify once.
